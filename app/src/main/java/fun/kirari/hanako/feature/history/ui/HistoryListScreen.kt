@@ -13,7 +13,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -28,6 +27,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +51,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
@@ -69,7 +72,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -109,7 +111,6 @@ fun HistorySubScreen(
     onSetMarkerColor: (Set<String>, HistoryMarkerColor?, (HistoryCommandResult) -> Unit) -> Unit = { _, _, _ -> },
     onCreateQuestionCard: (ProcessingResult) -> Unit = {}
 ) {
-    var groupsPage by remember { mutableStateOf(false) }
     var selectedGroupId by remember { mutableStateOf<String?>(null) }
     var actionTargetId by remember { mutableStateOf<String?>(null) }
     var groupPickerTargetIds by remember { mutableStateOf<Set<String>?>(null) }
@@ -121,6 +122,7 @@ fun HistorySubScreen(
     var showCreateGroup by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<HistoryGroup?>(null) }
     val listState = rememberLazyListState()
+    val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     LaunchedEffect(previewId) {
@@ -131,11 +133,11 @@ fun HistorySubScreen(
     }
     val metadataById = remember(settings.historyMetadata) { settings.historyMetadata.associateBy { it.historyId } }
 
-    BackHandler(enabled = groupsPage || selectionMode) {
+    BackHandler(enabled = pagerState.currentPage != 0 || selectedGroupId != null || selectionMode) {
         when {
             selectionMode -> { selectionMode = false; selectedIds = emptySet(); previewId = null }
             selectedGroupId != null -> selectedGroupId = null
-            else -> groupsPage = false
+            else -> scope.launch { pagerState.animateScrollToPage(0) }
         }
     }
     RegisterScrollToTopHandler(route = scrollRoute) { scope.launch { listState.animateScrollToItem(0) } }
@@ -149,34 +151,27 @@ fun HistorySubScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedVisibility(
-            visible = !groupsPage,
-            enter = slideInHorizontally { -it / 8 } + fadeIn(),
-            exit = slideOutHorizontally { -it / 8 } + fadeOut()
-        ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(groupsPage) {
-                        var distance = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = { distance = 0f },
-                            onHorizontalDrag = { change, dragAmount ->
-                                distance += dragAmount
-                                change.consume()
-                            },
-                            onDragEnd = {
-                                if (distance > 56f) {
-                                    groupsPage = true
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                }
-                            }
-                        )
-                    },
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+        Column(Modifier.fillMaxSize()) {
+            TabRow(selectedTabIndex = pagerState.currentPage) {
+                listOf("历史记录", "分组").forEachIndexed { index, title ->
+                    Tab(
+                        selected = pagerState.currentPage == index,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                        text = { Text(title) }
+                    )
+                }
+            }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f),
+                userScrollEnabled = !selectionMode
+            ) { page ->
+                if (page == 0) LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 item {
                     HistoryListHeader(
                         title = if (selectedGroupId == null) "历史记录" else settings.historyGroups.firstOrNull { it.id == selectedGroupId }?.name ?: "历史记录",
@@ -218,24 +213,19 @@ fun HistorySubScreen(
                     }
                 }
                 item { Spacer(modifier = Modifier.height(88.dp)) }
+                } else GroupBrowser(
+                    groups = settings.historyGroups,
+                    history = history,
+                    metadataById = metadataById,
+                    onSelectGroup = { id ->
+                        selectedGroupId = id.takeIf { it.isNotEmpty() }
+                        scope.launch { pagerState.animateScrollToPage(0) }
+                    },
+                    onCreate = { showCreateGroup = true },
+                    onRename = { renameTarget = it },
+                    onDelete = { deleteGroupTarget = it }
+                )
             }
-        }
-
-        AnimatedVisibility(
-            visible = groupsPage,
-            enter = slideInHorizontally { it / 2 } + fadeIn(),
-            exit = slideOutHorizontally { it / 2 } + fadeOut()
-        ) {
-            GroupBrowser(
-                groups = settings.historyGroups,
-                history = history,
-                metadataById = metadataById,
-                onBack = { groupsPage = false; selectedGroupId = null },
-                onSelectGroup = { id -> selectedGroupId = id.takeIf { it.isNotEmpty() }; groupsPage = false },
-                onCreate = { showCreateGroup = true },
-                onRename = { renameTarget = it },
-                onDelete = { deleteGroupTarget = it }
-            )
         }
 
         if (selectionMode) {
@@ -477,9 +467,9 @@ private fun formatHistoryTime(millis: Long): String = DateFormat.getTimeInstance
     Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = onClick) { Icon(icon, label, tint = tint) }; Text(label, style = MaterialTheme.typography.labelSmall, color = tint) }
 }
 
-@Composable private fun GroupBrowser(groups: List<HistoryGroup>, history: List<ProcessingResult>, metadataById: Map<String, `fun`.kirari.hanako.core.data.HistoryRecordMetadata>, onBack: () -> Unit, onSelectGroup: (String) -> Unit, onCreate: () -> Unit, onRename: (HistoryGroup) -> Unit, onDelete: (HistoryGroup) -> Unit) {
+@Composable private fun GroupBrowser(groups: List<HistoryGroup>, history: List<ProcessingResult>, metadataById: Map<String, `fun`.kirari.hanako.core.data.HistoryRecordMetadata>, onSelectGroup: (String) -> Unit, onCreate: () -> Unit, onRename: (HistoryGroup) -> Unit, onDelete: (HistoryGroup) -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") }; Text("分组", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold); Spacer(Modifier.weight(1f)); IconButton(onClick = onCreate) { Icon(Icons.Default.Folder, "新建分组") } }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("管理分组", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold); Spacer(Modifier.weight(1f)); IconButton(onClick = onCreate) { Icon(Icons.Default.Folder, "新建分组") } }
         GroupRow("全部记录", history.size, onClick = { onSelectGroup("") })
         GroupRow("未分组", history.count { metadataById[it.id]?.groupIds.isNullOrEmpty() }, onClick = { onSelectGroup("__ungrouped__") })
         groups.forEach { group ->
