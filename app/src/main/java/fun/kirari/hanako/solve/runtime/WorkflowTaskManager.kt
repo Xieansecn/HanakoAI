@@ -383,18 +383,19 @@ internal class WorkflowTaskManager(
     suspend fun removeHistoryResult(historyId: String) {
         cancelHistoryTask(historyId)
         resultStore.remove(historyId)
-        repository.update { current ->
-            current.copy(
-                history = current.history.filterNot { it.id == historyId },
-                lastResult = current.lastResult?.takeUnless { it.id == historyId }
-            )
-        }
+            repository.update { current ->
+                current.copy(
+                    history = current.history.filterNot { it.id == historyId },
+                    historyMetadata = current.historyMetadata.filterNot { it.historyId == historyId },
+                    lastResult = current.lastResult?.takeUnless { it.id == historyId }
+                )
+            }
     }
 
     suspend fun clearHistory() {
         taskRegistry.cancelAll()
         resultStore.clear()
-        repository.update { it.copy(history = emptyList(), lastResult = null) }
+        repository.update { it.copy(history = emptyList(), historyMetadata = emptyList(), lastResult = null) }
     }
 
     fun mergedHistory(persisted: List<ProcessingResult>): List<ProcessingResult> {

@@ -44,6 +44,15 @@ class RichTextLatexTest {
     }
 
     @Test
+    fun preprocessMarkdown_preservesCopyMarkerRawSource() {
+        val source = "[copy:${'$'}x^2${'$'}\\n\\[\\frac{1}{2}\\]]"
+        val result = parseMarkdown(source)
+
+        assertEquals(1, result.copyMarkers.size)
+        assertEquals("${'$'}x^2${'$'}\\n\\[\\frac{1}{2}\\]", result.copyMarkers.single().rawSource)
+    }
+
+    @Test
     fun preprocessMarkdown_turnsBracketLatexIntoBlockMath() {
         val source = """
             B：若 \(\sum_{n=1}^{\infty}u_n=s\)，则 \[

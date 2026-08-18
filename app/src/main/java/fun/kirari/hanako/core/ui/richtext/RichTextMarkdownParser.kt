@@ -23,7 +23,7 @@ internal val escapedDollarBlockDelimiterRegex = Regex("""(?m)^([ \t]*)\\\$\\\$[ 
 internal val dollarBlockLatexRegex = Regex("""(?m)(^|[ \t]*\n)[ \t]*\$\$[ \t]*\n?([\s\S]+?)\n?[ \t]*\$\$[ \t]*(?=\n|$)""")
 internal val codeBlockRegex = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 internal val breakLineRegex = Regex("(?i)<br\\s*/?>")
-internal val copyMarkerRegex = Regex("""\[(?:copy|复制):(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
+internal val copyMarkerRegex = Regex("""\[(?:copy|复制):((?:\\.|[^\]])*)\]""", RegexOption.DOT_MATCHES_ALL)
 
 private fun codeRangesIn(content: String): List<IntRange> {
     val codeBlocks = mutableListOf<IntRange>()
@@ -42,12 +42,12 @@ private fun replaceCopyMarkers(content: String): Pair<String, List<CopyMarkerTok
         if (inCodeBlock(match.range.first)) {
             match.value
         } else {
-            val copyText = match.groupValues[1].trim()
-            if (copyText.isBlank()) {
+            val rawSource = match.groupValues[1]
+            if (rawSource.isBlank()) {
                 match.value
             } else {
                 val placeholder = "HanakoCopyMarker${markers.size}"
-                markers += CopyMarkerToken(placeholder = placeholder, copyText = copyText)
+                markers += CopyMarkerToken(placeholder = placeholder, rawSource = rawSource)
                 placeholder
             }
         }
@@ -56,9 +56,13 @@ private fun replaceCopyMarkers(content: String): Pair<String, List<CopyMarkerTok
     return result to markers
 }
 
-internal fun preprocessMarkdown(content: String): Pair<String, List<CopyMarkerToken>> {
+internal fun preprocessMarkdown(content: String, extractCopyMarkers: Boolean = true): Pair<String, List<CopyMarkerToken>> {
     val normalizedContent = content.normalizeMarkdownNewlines()
-    val (copyPreprocessed, copyMarkers) = replaceCopyMarkers(normalizedContent)
+    val (copyPreprocessed, copyMarkers) = if (extractCopyMarkers) {
+        replaceCopyMarkers(normalizedContent)
+    } else {
+        normalizedContent to emptyList()
+    }
     val codeBlocks = codeRangesIn(copyPreprocessed)
 
     fun inCodeBlock(index: Int): Boolean = codeBlocks.any { index in it }
@@ -89,8 +93,11 @@ internal fun preprocessMarkdown(content: String): Pair<String, List<CopyMarkerTo
 
 internal data class CopyMarkerToken(
     val placeholder: String,
-    val copyText: String
-)
+    val rawSource: String
+) {
+    @Deprecated("Use rawSource")
+    val copyText: String get() = rawSource
+}
 
 internal data class MarkdownParseResult(
     val preprocessed: String,
@@ -113,8 +120,8 @@ internal fun ASTNode.findChildRecursive(vararg types: IElementType): ASTNode? {
     return null
 }
 
-internal fun parseMarkdown(content: String): MarkdownParseResult {
-    val (preprocessed, copyMarkers) = preprocessMarkdown(content)
+internal fun parseMarkdown(content: String, extractCopyMarkers: Boolean = true): MarkdownParseResult {
+    val (preprocessed, copyMarkers) = preprocessMarkdown(content, extractCopyMarkers)
     return MarkdownParseResult(
         preprocessed = preprocessed,
         astTree = markdownParser.buildMarkdownTreeFromString(preprocessed),

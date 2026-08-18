@@ -1,12 +1,16 @@
 package `fun`.kirari.hanako.feature.history.presentation
 
 import `fun`.kirari.hanako.core.data.AppSettings
+import `fun`.kirari.hanako.core.data.HistoryCommandResult
+import `fun`.kirari.hanako.core.data.HistoryMarkerColor
 import `fun`.kirari.hanako.core.data.ModelSelection
 import `fun`.kirari.hanako.core.data.ModelPurpose
+import `fun`.kirari.hanako.core.data.SettingsRepository
 import `fun`.kirari.hanako.core.data.modelSelectionFor
 import `fun`.kirari.hanako.core.model.ProcessingResult
 import `fun`.kirari.hanako.core.model.ProcessingRoute
 import `fun`.kirari.hanako.solve.application.SolveOperations
+import `fun`.kirari.hanako.feature.history.application.QuestionCardExporter
 import `fun`.kirari.hanako.solve.application.SolveHistoryState
 import `fun`.kirari.hanako.solve.model.WorkflowTaskKind
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +39,9 @@ data class HistoryDetailUiState(
 internal class HistoryWorkflowController(
     private val scope: CoroutineScope,
     private val settings: StateFlow<AppSettings>,
-    private val solveOperations: SolveOperations
+    private val solveOperations: SolveOperations,
+    private val settingsRepository: SettingsRepository,
+    private val questionCardExporter: QuestionCardExporter? = null
 ) {
     private val _conversationModelSelections = MutableStateFlow<Map<String, ModelSelection>>(emptyMap())
     private val historyState = solveOperations.observeHistory(settings.map { it.history })
@@ -71,6 +77,7 @@ internal class HistoryWorkflowController(
 
     fun clearHistory() {
         _conversationModelSelections.value = emptyMap()
+        questionCardExporter?.deleteAllArtifacts()
         scope.launch {
             solveOperations.clearHistory()
         }
@@ -78,6 +85,7 @@ internal class HistoryWorkflowController(
 
     fun deleteHistoryItem(resultId: String) {
         _conversationModelSelections.value = _conversationModelSelections.value - resultId
+        questionCardExporter?.deleteArtifacts(resultId)
         scope.launch {
             solveOperations.removeHistoryResult(resultId)
         }
@@ -112,6 +120,34 @@ internal class HistoryWorkflowController(
 
     fun selectConversationModel(resultId: String, selection: ModelSelection) {
         _conversationModelSelections.value = _conversationModelSelections.value + (resultId to selection)
+    }
+
+    fun createGroup(name: String, onResult: (HistoryCommandResult) -> Unit = {}) {
+        scope.launch { onResult(settingsRepository.createHistoryGroup(name)) }
+    }
+
+    fun renameGroup(id: String, name: String, onResult: (HistoryCommandResult) -> Unit = {}) {
+        scope.launch { onResult(settingsRepository.renameHistoryGroup(id, name)) }
+    }
+
+    fun deleteGroup(id: String, onResult: (HistoryCommandResult) -> Unit = {}) {
+        scope.launch { onResult(settingsRepository.deleteHistoryGroup(id)) }
+    }
+
+    fun setGroups(recordIds: Set<String>, groupIds: Set<String>, onResult: (HistoryCommandResult) -> Unit = {}) {
+        scope.launch { onResult(settingsRepository.setHistoryGroups(recordIds, groupIds)) }
+    }
+
+    fun setMarkerColor(recordIds: Set<String>, color: HistoryMarkerColor?, onResult: (HistoryCommandResult) -> Unit = {}) {
+        scope.launch { onResult(settingsRepository.setHistoryMarkerColor(recordIds, color)) }
+    }
+
+    fun createQuestionCard(resultId: String) {
+        val exporter = questionCardExporter ?: return
+        scope.launch {
+            val result = settings.value.history.firstOrNull { it.id == resultId } ?: return@launch
+            exporter.export(result)
+        }
     }
 }
 

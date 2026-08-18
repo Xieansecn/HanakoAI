@@ -324,7 +324,13 @@ fun HanakoApp(viewModel: AppViewModel) {
                             onDeleteHistoryItem = viewModel::deleteHistoryItem,
                             onOpenHistoryDetail = { resultId ->
                                 navController.navigate(historyDetailRoute(resultId))
-                            }
+                            },
+                            onCreateGroup = viewModel::createHistoryGroup,
+                            onRenameGroup = viewModel::renameHistoryGroup,
+                            onDeleteGroup = viewModel::deleteHistoryGroup,
+                            onSetGroups = viewModel::setHistoryGroups,
+                            onSetMarkerColor = viewModel::setHistoryMarkerColor,
+                            onCreateQuestionCard = { viewModel.createQuestionCard(it.id) }
                         )
                     }
                     composable(ROUTE_HANAKO_HISTORY_DETAIL_PATTERN) { entry ->

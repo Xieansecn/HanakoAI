@@ -120,7 +120,8 @@ data class AssistantPreset(
     val name: String,
     val ocrPrompt: String,
     val textPrompt: String,
-    val visionPrompt: String
+    val visionPrompt: String,
+    val titleSummary: TitleSummarySettings = TitleSummarySettings()
 )
 
 @Serializable
@@ -195,6 +196,7 @@ data class WebSearchSettings(
 
 @Serializable
 data class AppSettings(
+    val schemaVersion: Int = 2,
     val providers: List<ModelProviderConfig> = listOf(defaultProvider()),
     val selectedProviderId: String? = providers.firstOrNull()?.id,
     val assistants: List<AssistantPreset> = defaultAssistants(),
@@ -210,7 +212,9 @@ data class AppSettings(
     val kirari: KirariSettings = KirariSettings(),
     val webSearch: WebSearchSettings = WebSearchSettings(),
     val lastResult: ProcessingResult? = null,
-    val history: List<ProcessingResult> = emptyList()
+    val history: List<ProcessingResult> = emptyList(),
+    val historyGroups: List<HistoryGroup> = emptyList(),
+    val historyMetadata: List<HistoryRecordMetadata> = emptyList()
 )
 
 fun defaultProvider(): ModelProviderConfig = ModelProviderConfig()
@@ -318,7 +322,14 @@ fun AppSettings.normalize(): AppSettings {
         kirari = normalizedKirari
     ).availableProviders()
     val fallbackProvider = availableProviders.firstOrNull { it.id == selectedProviderId } ?: availableProviders.firstOrNull()
+    val normalizedGroups = historyGroups
+        .map { it.copy(name = it.name.normalizedHistoryGroupName()) }
+        .filter { it.name.isNotBlank() }
+        .distinctBy { it.name.lowercase() }
+    val normalizedHistory = copy(historyGroups = normalizedGroups)
+        .normalizedHistoryMetadata()
     return copy(
+        schemaVersion = maxOf(schemaVersion, 2),
         providers = normalizedProviders,
         automation = automation.normalize(),
         kirari = normalizedKirari,
@@ -343,7 +354,9 @@ fun AppSettings.normalize(): AppSettings {
             fallbackModel = fallbackProvider?.ocrModel?.ifBlank {
                 fallbackProvider.visionModel
             } ?: fallbackProvider?.visionModel.orEmpty()
-        )
+        ),
+        historyGroups = normalizedGroups,
+        historyMetadata = normalizedHistory
     )
 }
 

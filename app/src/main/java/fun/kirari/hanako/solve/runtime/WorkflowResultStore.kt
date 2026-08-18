@@ -1,6 +1,8 @@
 package `fun`.kirari.hanako.solve.runtime
 
 import `fun`.kirari.hanako.core.model.ProcessingResult
+import `fun`.kirari.hanako.core.data.historyMetadataFor
+import `fun`.kirari.hanako.core.data.normalizedHistoryMetadata
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -104,7 +106,15 @@ internal class WorkflowResultStore(
         persistVersions[result.id] = (persistVersions[result.id] ?: 0L) + 1L
         repository.update { current ->
             val history = listOf(result) + current.history.filterNot { it.id == result.id }
-            current.copy(lastResult = result, history = history)
+            val previous = current.historyMetadataFor(result)
+            val changed = current.history.firstOrNull { it.id == result.id }?.let { it != result } == true
+            val metadata = current.normalizedHistoryMetadata().map { entry ->
+                if (entry.historyId == result.id) entry.copy(
+                    lastActivityAtMillis = maxOf(entry.lastActivityAtMillis, result.createdAtMillis),
+                    contentRevision = if (changed) entry.contentRevision + 1 else entry.contentRevision
+                ) else entry
+            }
+            current.copy(lastResult = result, history = history, historyMetadata = metadata)
         }
     }
 

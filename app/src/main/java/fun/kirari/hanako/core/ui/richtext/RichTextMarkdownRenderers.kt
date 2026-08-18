@@ -67,9 +67,10 @@ import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 fun MarkdownLatexText(
     content: String,
     modifier: Modifier = Modifier,
-    style: TextStyle = androidx.compose.material3.LocalTextStyle.current
+    style: TextStyle = androidx.compose.material3.LocalTextStyle.current,
+    extractCopyMarkers: Boolean = true
 ) {
-    val parsed = remember(content) { parseMarkdown(content) }
+    val parsed = remember(content, extractCopyMarkers) { parseMarkdown(content, extractCopyMarkers) }
     val copyMarkerMap = remember(parsed.copyMarkers) {
         parsed.copyMarkers.associateBy { it.placeholder }
     }
@@ -101,38 +102,41 @@ fun MarkdownLatexText(
 }
 
 @Composable
-private fun CopyMarkerChip(
-    copyText: String
+private fun CopyMarkerBlock(
+    rawSource: String
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
-        shape = MaterialTheme.shapes.small
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.medium,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .clickable {
-                    clipboardManager.setText(AnnotatedString(copyText))
-                    android.widget.Toast.makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT).show()
-                }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = copyText.replace('\n', ' '),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 180.dp)
-            )
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("可复制内容", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Icon(
                 imageVector = Icons.Filled.ContentCopy,
-                contentDescription = "复制",
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(14.dp)
+                contentDescription = "复制原文",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable {
+                        clipboardManager.setText(AnnotatedString(rawSource))
+                        android.widget.Toast.makeText(context, "已复制原文", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+            )
+            }
+            MarkdownLatexText(
+                content = rawSource,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp),
+                extractCopyMarkers = false
             )
         }
     }
@@ -166,9 +170,9 @@ private fun InlineMarkdownText(
 
 @Composable
 private fun CopyMarkerInline(
-    copyText: String
+    rawSource: String
 ) {
-    CopyMarkerChip(copyText = copyText)
+    CopyMarkerBlock(rawSource = rawSource)
 }
 
 private fun copyPlaceholderFor(copyText: String): Placeholder {
@@ -796,7 +800,7 @@ private data class CopyMarkerOccurrence(
     val start: Int,
     val length: Int,
     val key: String,
-    val copyText: String
+    val rawSource: String
 )
 
 private fun findNextCopyMarkerOccurrence(
@@ -812,7 +816,7 @@ private fun findNextCopyMarkerOccurrence(
                     start = index,
                     length = token.placeholder.length,
                     key = token.placeholder,
-                    copyText = token.copyText
+                    rawSource = token.rawSource
                 )
             } else {
                 null
@@ -821,15 +825,15 @@ private fun findNextCopyMarkerOccurrence(
         .minByOrNull { it.start }
 
     val rawMatch = copyMarkerRegex.find(text, startIndex)?.let { match ->
-        val copyText = match.groupValues[1].trim()
-        if (copyText.isBlank()) {
+        val rawSource = match.groupValues[1]
+        if (rawSource.isBlank()) {
             null
         } else {
             CopyMarkerOccurrence(
                 start = match.range.first,
                 length = match.value.length,
                 key = rawCopyInlineKey(match.range.first, match.value),
-                copyText = copyText
+                rawSource = rawSource
             )
         }
     }
@@ -871,8 +875,8 @@ private fun AnnotatedString.Builder.appendCopyAwareText(
         }
 
         if (nextMarker != null && nextMarker.start == cursor) {
-            inlineContents.putIfAbsent(nextMarker.key, InlineTextContent(copyPlaceholderFor(nextMarker.copyText)) {
-                CopyMarkerInline(copyText = nextMarker.copyText)
+            inlineContents.putIfAbsent(nextMarker.key, InlineTextContent(copyPlaceholderFor(nextMarker.rawSource)) {
+                CopyMarkerInline(rawSource = nextMarker.rawSource)
             })
             appendInlineContent(nextMarker.key, "copy")
             cursor += nextMarker.length

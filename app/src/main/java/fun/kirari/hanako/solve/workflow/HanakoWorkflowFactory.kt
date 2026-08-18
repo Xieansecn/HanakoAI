@@ -221,6 +221,8 @@ internal class HanakoWorkflowFactory(
             answer = output.answerOutput.answer,
             answerVersions = listOf(AnswerVersion(output.answerOutput.answer)),
             events = events,
+            lastSearchAtMillis = output.answerOutput.searchOutcome?.takeIf { it.performed }?.let { System.currentTimeMillis() },
+            lastSearchQuery = output.answerOutput.searchOutcome?.keywords,
             checkpoints = output.checkpoints.toProcessingCheckpointSummaries()
         )
     }
@@ -264,6 +266,8 @@ internal class HanakoWorkflowFactory(
                 AutomationActionDelivery.PENDING
             },
             events = events,
+            lastSearchAtMillis = output.automationOutput.searchOutcome?.takeIf { it.performed }?.let { System.currentTimeMillis() },
+            lastSearchQuery = output.automationOutput.searchOutcome?.keywords,
             checkpoints = output.checkpoints.toProcessingCheckpointSummaries()
         )
         return action to result

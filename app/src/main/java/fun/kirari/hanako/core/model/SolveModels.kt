@@ -29,6 +29,8 @@ data class ProcessingResult(
     val screenshotPaths: List<String> = emptyList(),
     val events: List<ProcessingEvent> = emptyList(),
     val checkpoints: List<ProcessingCheckpointSummary> = emptyList(),
+    val lastSearchAtMillis: Long? = null,
+    val lastSearchQuery: String? = null,
     val createdAtMillis: Long = System.currentTimeMillis()
 ) {
     val allScreenshotPaths: List<String>

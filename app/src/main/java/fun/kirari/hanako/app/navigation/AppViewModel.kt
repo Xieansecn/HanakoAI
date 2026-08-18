@@ -18,6 +18,8 @@ import androidx.lifecycle.viewModelScope
 import `fun`.kirari.hanako.app.HanakoApplication
 import `fun`.kirari.hanako.BuildConfig
 import `fun`.kirari.hanako.core.data.AppSettings
+import `fun`.kirari.hanako.core.data.HistoryCommandResult
+import `fun`.kirari.hanako.core.data.HistoryMarkerColor
 import `fun`.kirari.hanako.core.data.AssistantPreset
 import `fun`.kirari.hanako.core.data.AutomationSettings
 import `fun`.kirari.hanako.core.data.ModelPurpose
@@ -32,6 +34,7 @@ import `fun`.kirari.hanako.core.data.KirariSettings
 import `fun`.kirari.hanako.core.data.WebSearchSettings
 import `fun`.kirari.hanako.platform.capture.ocr.LocalOcrManager
 import `fun`.kirari.hanako.feature.history.presentation.HistoryWorkflowController
+import `fun`.kirari.hanako.feature.history.application.QuestionCardExporter
 import `fun`.kirari.hanako.feature.history.presentation.HistoryDetailUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -53,7 +56,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val historyWorkflowController = HistoryWorkflowController(
         scope = viewModelScope,
         settings = settings,
-        solveOperations = container.workflow.operations
+        solveOperations = container.workflow.operations,
+        settingsRepository = repository,
+        questionCardExporter = QuestionCardExporter(application, repository)
     )
     val historyDetailStates: StateFlow<Map<String, HistoryDetailUiState>> =
         historyWorkflowController.historyDetailStates
@@ -248,6 +253,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun retryLatestHistoryFollowUp(resultId: String) {
         historyWorkflowController.retryLatestHistoryFollowUp(resultId)
     }
+
+    fun createHistoryGroup(name: String, onResult: (HistoryCommandResult) -> Unit = {}) =
+        historyWorkflowController.createGroup(name, onResult)
+
+    fun renameHistoryGroup(id: String, name: String, onResult: (HistoryCommandResult) -> Unit = {}) =
+        historyWorkflowController.renameGroup(id, name, onResult)
+
+    fun deleteHistoryGroup(id: String, onResult: (HistoryCommandResult) -> Unit = {}) =
+        historyWorkflowController.deleteGroup(id, onResult)
+
+    fun setHistoryGroups(recordIds: Set<String>, groupIds: Set<String>, onResult: (HistoryCommandResult) -> Unit = {}) =
+        historyWorkflowController.setGroups(recordIds, groupIds, onResult)
+
+    fun setHistoryMarkerColor(recordIds: Set<String>, color: HistoryMarkerColor?, onResult: (HistoryCommandResult) -> Unit = {}) =
+        historyWorkflowController.setMarkerColor(recordIds, color, onResult)
+
+    fun createQuestionCard(resultId: String) = historyWorkflowController.createQuestionCard(resultId)
 
     fun testProviderConnection(provider: ModelProviderConfig) {
         providerRuntimeController.testProviderConnection(provider)
