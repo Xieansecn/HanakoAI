@@ -213,14 +213,32 @@ fun HistorySubScreen(
                     }
                 }
                 item { Spacer(modifier = Modifier.height(88.dp)) }
-                } else GroupBrowser(
+                } else if (selectedGroupId != null) GroupDetailScreen(
+                    groupId = selectedGroupId!!,
+                    groups = settings.historyGroups,
+                    history = history,
+                    settings = settings,
+                    selectedIds = selectedIds,
+                    selectionMode = selectionMode,
+                    previewId = previewId,
+                    onBack = { selectedGroupId = null },
+                    onOpenHistoryDetail = onOpenHistoryDetail,
+                    onToggleSelection = { id -> selectedIds = selectedIds.toggle(id) },
+                    onLongPress = { result ->
+                        if (selectionMode) {
+                            previewId = result.id
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        } else {
+                            actionTargetId = result.id
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                    },
+                    onDismissPreview = { previewId = null }
+                ) else GroupBrowser(
                     groups = settings.historyGroups,
                     history = history,
                     metadataById = metadataById,
-                    onSelectGroup = { id ->
-                        selectedGroupId = id.takeIf { it.isNotEmpty() }
-                        scope.launch { pagerState.animateScrollToPage(0) }
-                    },
+                    onSelectGroup = { id -> selectedGroupId = id.takeIf { it.isNotEmpty() } },
                     onCreate = { showCreateGroup = true },
                     onRename = { renameTarget = it },
                     onDelete = { deleteGroupTarget = it }
@@ -467,9 +485,67 @@ private fun formatHistoryTime(millis: Long): String = DateFormat.getTimeInstance
     Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = onClick) { Icon(icon, label, tint = tint) }; Text(label, style = MaterialTheme.typography.labelSmall, color = tint) }
 }
 
+@Composable
+private fun GroupDetailScreen(
+    groupId: String,
+    groups: List<HistoryGroup>,
+    history: List<ProcessingResult>,
+    settings: AppSettings,
+    selectedIds: Set<String>,
+    selectionMode: Boolean,
+    previewId: String?,
+    onBack: () -> Unit,
+    onOpenHistoryDetail: (String) -> Unit,
+    onToggleSelection: (String) -> Unit,
+    onLongPress: (ProcessingResult) -> Unit,
+    onDismissPreview: () -> Unit
+) {
+    val title = if (groupId == "__ungrouped__") "未分组" else groups.firstOrNull { it.id == groupId }?.name ?: "分组"
+    val records = history.filter { result ->
+        if (groupId == "__ungrouped__") settings.historyMetadataFor(result).groupIds.isEmpty()
+        else groupId in settings.historyMetadataFor(result).groupIds
+    }
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回分组") }
+            Text(title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+        }
+        if (records.isEmpty()) {
+            SectionCard(title = "暂无记录", modifier = Modifier.padding(16.dp)) {
+                Text("加入这个分组的历史记录会显示在这里。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(records, key = { it.id }) { result ->
+                    HistoryListItem(
+                        result = result,
+                        settings = settings,
+                        selected = result.id in selectedIds,
+                        selectionMode = selectionMode,
+                        onClick = {
+                            if (selectionMode) onToggleSelection(result.id) else onOpenHistoryDetail(result.id)
+                        },
+                        onLongClick = { onLongPress(result) }
+                    )
+                    if (previewId == result.id) {
+                        HistoryPreviewOverlay(result = result, onDismiss = onDismissPreview)
+                    }
+                }
+                item { Spacer(Modifier.height(88.dp)) }
+            }
+        }
+    }
+}
+
 @Composable private fun GroupBrowser(groups: List<HistoryGroup>, history: List<ProcessingResult>, metadataById: Map<String, `fun`.kirari.hanako.core.data.HistoryRecordMetadata>, onSelectGroup: (String) -> Unit, onCreate: () -> Unit, onRename: (HistoryGroup) -> Unit, onDelete: (HistoryGroup) -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("管理分组", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold); Spacer(Modifier.weight(1f)); IconButton(onClick = onCreate) { Icon(Icons.Default.Folder, "新建分组") } }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("管理分组", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold); Spacer(Modifier.weight(1f)); IconButton(onClick = onCreate) { Icon(Icons.Default.Folder, "新建分组", tint = MaterialTheme.colorScheme.primary) } }
         GroupRow("全部记录", history.size, onClick = { onSelectGroup("") })
         GroupRow("未分组", history.count { metadataById[it.id]?.groupIds.isNullOrEmpty() }, onClick = { onSelectGroup("__ungrouped__") })
         groups.forEach { group ->
@@ -483,7 +559,7 @@ private fun formatHistoryTime(millis: Long): String = DateFormat.getTimeInstance
 }
 
 @Composable private fun GroupRow(name: String, count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = null).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary); Text(name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium); Text("$count", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = null).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary); Text(name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface); Text("$count", color = MaterialTheme.colorScheme.onSurfaceVariant) }
 }
 
 @Composable private fun HistoryPreviewOverlay(result: ProcessingResult, onDismiss: () -> Unit) {
