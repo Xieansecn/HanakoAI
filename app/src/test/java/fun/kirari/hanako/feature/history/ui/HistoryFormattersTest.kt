@@ -8,6 +8,7 @@ import `fun`.kirari.hanako.core.model.ProcessingStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
+import java.util.Calendar
 
 class HistoryFormattersTest {
 
@@ -126,5 +127,26 @@ class HistoryFormattersTest {
         assertEquals("512B", formatHistorySize(512))
         assertEquals("1.5KB", formatHistorySize(1536))
         assertEquals("2.0MB", formatHistorySize(2L * 1024L * 1024L))
+    }
+
+    @Test
+    fun formatHistoryDateTime_usesRelativeAndCalendarLabels() {
+        val now = Calendar.getInstance().apply {
+            set(2026, Calendar.AUGUST, 18, 16, 40, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        fun offset(days: Int, hours: Int = 0, minutes: Int = 0): Long =
+            (now.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_YEAR, -days)
+                add(Calendar.HOUR_OF_DAY, -hours)
+                add(Calendar.MINUTE, -minutes)
+            }.timeInMillis
+
+        assertEquals("5分钟前", formatHistoryDateTime(offset(0, minutes = 5), now.timeInMillis))
+        assertEquals("15:20", formatHistoryDateTime(offset(0, hours = 1, minutes = 20), now.timeInMillis))
+        assertEquals("昨天 15:30", formatHistoryDateTime((now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1); set(Calendar.HOUR_OF_DAY, 15); set(Calendar.MINUTE, 30) }.timeInMillis, now.timeInMillis))
+        assertEquals("前天 15:30", formatHistoryDateTime((now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -2); set(Calendar.HOUR_OF_DAY, 15); set(Calendar.MINUTE, 30) }.timeInMillis, now.timeInMillis))
+        assertEquals("8月1日 09:00", formatHistoryDateTime((now.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 9); set(Calendar.MINUTE, 0) }.timeInMillis, now.timeInMillis))
+        assertEquals("25年12月31日 23:00", formatHistoryDateTime((now.clone() as Calendar).apply { add(Calendar.YEAR, -1); set(Calendar.MONTH, Calendar.DECEMBER); set(Calendar.DAY_OF_MONTH, 31); set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 0) }.timeInMillis, now.timeInMillis))
     }
 }

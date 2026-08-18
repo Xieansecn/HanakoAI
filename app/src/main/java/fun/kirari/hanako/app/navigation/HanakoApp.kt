@@ -95,6 +95,18 @@ import `fun`.kirari.hanako.feature.overlay.state.OverlayRuntimeState
 import `fun`.kirari.hanako.feature.overlay.service.OverlayService
 import `fun`.kirari.hanako.feature.history.ui.HistoryDetailScreen
 import `fun`.kirari.hanako.feature.history.ui.HistorySubScreen
+import `fun`.kirari.hanako.feature.history.ui.HistoryGroupDetailScreen
+import `fun`.kirari.hanako.feature.history.ui.HistoryActionSheet
+import `fun`.kirari.hanako.feature.history.ui.GroupPickerSheet
+import `fun`.kirari.hanako.feature.history.ui.GroupNameDialog
+import `fun`.kirari.hanako.feature.history.ui.ConfirmDialog
+import `fun`.kirari.hanako.feature.history.ui.SelectionDock
+import `fun`.kirari.hanako.core.data.historyMetadataFor
+import `fun`.kirari.hanako.core.data.historyDisplayTitle
+import `fun`.kirari.hanako.core.data.QuestionCardArtifact
+import `fun`.kirari.hanako.core.model.loadHistoryBitmap
+import `fun`.kirari.hanako.core.ui.image.ImagePreviewOverlay
+import `fun`.kirari.hanako.core.ui.image.saveBitmapToPictures
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,6 +125,39 @@ fun HanakoApp(viewModel: AppViewModel) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var modelSelectionDialogState by remember { mutableStateOf(ModelSelectionDialogState()) }
     var historyModelPickerResultId by rememberSaveable { mutableStateOf<String?>(null) }
+    var questionCardPreview by remember { mutableStateOf<QuestionCardArtifact?>(null) }
+    val previewQuestionCard: (String) -> Unit = { resultId ->
+        viewModel.createQuestionCard(resultId) { artifact ->
+            if (artifact == null) {
+                Toast.makeText(context, "题目卡片创建失败", Toast.LENGTH_SHORT).show()
+            } else {
+                questionCardPreview = artifact
+                Toast.makeText(context, "长按保存", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val saveQuestionCards: (List<String>) -> Unit = { resultIds ->
+        if (resultIds.isNotEmpty()) {
+            var completed = 0
+            var saved = 0
+            resultIds.forEach { resultId ->
+                viewModel.createQuestionCard(resultId) { artifact ->
+                    artifact?.path?.loadHistoryBitmap()?.let { bitmap ->
+                        if (saveBitmapToPictures(context, bitmap, "hanako_question_card_${artifact.id}.png")) saved++
+                    }
+                    completed++
+                    if (completed == resultIds.size) {
+                        val failed = resultIds.size - saved
+                        Toast.makeText(
+                            context,
+                            if (failed == 0) "已保存 ${saved} 张图片" else if (saved == 0) "保存失败，请检查相册权限或存储空间" else "已保存 ${saved} 张图片，${failed} 张保存失败",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
     val providerModelsApi = remember { HanakoApplication.instance.container.providerModelsApi }
     val scrollToTopController = rememberScrollToTopController()
 
@@ -194,7 +239,10 @@ fun HanakoApp(viewModel: AppViewModel) {
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                appTitle(currentRoute, currentScreen),
+                                if (currentRoute?.startsWith("$ROUTE_HANAKO_HISTORY_GROUP_DETAIL/") == true) {
+                                    val groupId = backStackEntry?.arguments?.getString(ARG_GROUP_ID)
+                                    settings.historyGroups.firstOrNull { it.id == groupId }?.name ?: "分组"
+                                } else appTitle(currentRoute, currentScreen),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             if (
@@ -330,8 +378,94 @@ fun HanakoApp(viewModel: AppViewModel) {
                             onDeleteGroup = viewModel::deleteHistoryGroup,
                             onSetGroups = viewModel::setHistoryGroups,
                             onSetMarkerColor = viewModel::setHistoryMarkerColor,
-                            onCreateQuestionCard = { viewModel.createQuestionCard(it.id) }
+                            onCreateQuestionCard = { result -> previewQuestionCard(result.id) },
+                            onCreateQuestionCards = { results -> saveQuestionCards(results.map { it.id }) },
+                            onOpenGroup = { groupId -> navController.navigate(historyGroupDetailRoute(groupId)) }
                         )
+                    }
+                    composable(ROUTE_HANAKO_HISTORY_GROUP_DETAIL_PATTERN) { entry ->
+                        val groupId = entry.arguments?.getString(ARG_GROUP_ID) ?: return@composable
+                        val mergedHistory by viewModel.mergedHistory.collectAsState()
+                        var actionTargetId by remember { mutableStateOf<String?>(null) }
+                        var groupPickerTargetIds by remember { mutableStateOf<Set<String>?>(null) }
+                        var deleteTargetIds by remember { mutableStateOf<Set<String>?>(null) }
+                        var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+                        var selectionMode by remember { mutableStateOf(false) }
+                        var previewId by remember { mutableStateOf<String?>(null) }
+                        var showCreateGroup by remember { mutableStateOf(false) }
+                        Box(Modifier.fillMaxSize()) {
+                            HistoryGroupDetailScreen(
+                                groupId = groupId,
+                                history = mergedHistory,
+                                settings = settings,
+                                selectedIds = selectedIds,
+                                selectionMode = selectionMode,
+                                previewId = previewId,
+                                onOpenHistoryDetail = { resultId -> navController.navigate(historyDetailRoute(resultId)) },
+                                onToggleSelection = { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id },
+                                onLongPress = { result ->
+                                    if (selectionMode) previewId = result.id else actionTargetId = result.id
+                                },
+                                onDismissPreview = { previewId = null }
+                            )
+                            if (selectionMode) {
+                                SelectionDock(
+                                    selectedCount = selectedIds.size,
+                                    onMove = { groupPickerTargetIds = selectedIds },
+                                    onColor = { color -> viewModel.setHistoryMarkerColor(selectedIds, color) {} },
+                                    onCreateCard = { saveQuestionCards(selectedIds.toList()) },
+                                    onDelete = { deleteTargetIds = selectedIds }
+                                )
+                            }
+                        }
+                        val actionTarget = mergedHistory.firstOrNull { it.id == actionTargetId }
+                        if (actionTarget != null) {
+                            HistoryActionSheet(
+                                result = actionTarget,
+                                selectedColor = settings.historyMetadataFor(actionTarget).markerColor,
+                                onDismiss = { actionTargetId = null },
+                                onMove = { groupPickerTargetIds = setOf(actionTarget.id); actionTargetId = null },
+                                onColor = { color -> viewModel.setHistoryMarkerColor(setOf(actionTarget.id), color) {}; actionTargetId = null },
+                                onMultiSelect = { selectionMode = true; selectedIds = setOf(actionTarget.id); actionTargetId = null },
+                                onCreateCard = { previewQuestionCard(actionTarget.id); actionTargetId = null },
+                                onDelete = { deleteTargetIds = setOf(actionTarget.id); actionTargetId = null }
+                            )
+                        }
+                        groupPickerTargetIds?.let { targetIds ->
+                            GroupPickerSheet(
+                                groups = settings.historyGroups,
+                                initial = targetIds.flatMap { id -> mergedHistory.firstOrNull { it.id == id }?.let(settings::historyMetadataFor)?.groupIds.orEmpty() }.toSet(),
+                                onDismiss = { groupPickerTargetIds = null },
+                                onConfirm = { groupIds ->
+                                    viewModel.setHistoryGroups(targetIds, groupIds) {
+                                        groupPickerTargetIds = null
+                                        selectedIds = emptySet()
+                                        selectionMode = false
+                                    }
+                                },
+                                onCreateGroup = { showCreateGroup = true }
+                            )
+                        }
+                        if (showCreateGroup) {
+                            GroupNameDialog("新建分组", onDismiss = { showCreateGroup = false }) { name ->
+                                viewModel.createHistoryGroup(name) { showCreateGroup = false }
+                            }
+                        }
+                        deleteTargetIds?.let { ids ->
+                            ConfirmDialog(
+                                title = "删除历史记录",
+                                message = if (ids.size == 1) {
+                                    mergedHistory.firstOrNull { it.id in ids }?.let { "确认删除 ${settings.historyDisplayTitle(it)}？" } ?: "确认删除这条记录？"
+                                } else "确认删除 ${ids.size} 条历史记录？",
+                                onDismiss = { deleteTargetIds = null },
+                                onConfirm = {
+                                    ids.forEach(viewModel::deleteHistoryItem)
+                                    deleteTargetIds = null
+                                    selectedIds = emptySet()
+                                    selectionMode = false
+                                }
+                            )
+                        }
                     }
                     composable(ROUTE_HANAKO_HISTORY_DETAIL_PATTERN) { entry ->
                         val resultId = entry.arguments?.getString(ARG_HISTORY_ID)
@@ -531,6 +665,23 @@ fun HanakoApp(viewModel: AppViewModel) {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    questionCardPreview?.let { artifact ->
+        val bitmap = remember(artifact.path) { artifact.path.loadHistoryBitmap() }
+        if (bitmap != null) {
+            ImagePreviewOverlay(
+                visible = true,
+                bitmap = bitmap,
+                fileName = "hanako_question_card_${artifact.id}",
+                onDismiss = { questionCardPreview = null }
+            )
+        } else {
+            LaunchedEffect(artifact.path) {
+                Toast.makeText(context, "题目卡片预览失败", Toast.LENGTH_SHORT).show()
+                questionCardPreview = null
             }
         }
     }

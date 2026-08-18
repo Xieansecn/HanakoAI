@@ -74,31 +74,74 @@ fun MarkdownLatexText(
     val copyMarkerMap = remember(parsed.copyMarkers) {
         parsed.copyMarkers.associateBy { it.placeholder }
     }
+    val copyBlocks = remember(parsed.preprocessed, parsed.copyMarkers) {
+        splitCopyMarkerBlocks(parsed.preprocessed, parsed.copyMarkers)
+    }
 
     ProvideTextStyle(style) {
-        Column(modifier = modifier) {
-            splitDisplayMathBlocks(parsed.preprocessed).fastForEach { block ->
-                when (block) {
-                    is MarkdownRenderBlock.DisplayMath -> LatexBlock(
-                        latex = block.latex,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                    )
-                    is MarkdownRenderBlock.Markdown -> {
-                        val astTree = remember(block.content) {
-                            markdownParser.buildMarkdownTreeFromString(block.content)
-                        }
-                        astTree.children.fastForEach { child ->
-                            MarkdownNode(
-                                node = child,
-                                content = block.content,
-                                copyMarkerMap = copyMarkerMap
-                            )
+        if (extractCopyMarkers && parsed.copyMarkers.isNotEmpty()) {
+            Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                copyBlocks.fastForEach { block ->
+                    when (block) {
+                        is CopyMarkerRenderBlock.Markdown -> MarkdownLatexText(
+                            content = block.content,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = style,
+                            extractCopyMarkers = false
+                        )
+                        is CopyMarkerRenderBlock.Copy -> CopyMarkerBlock(rawSource = block.rawSource)
+                    }
+                }
+            }
+        } else {
+            Column(modifier = modifier) {
+                splitDisplayMathBlocks(parsed.preprocessed).fastForEach { block ->
+                    when (block) {
+                        is MarkdownRenderBlock.DisplayMath -> LatexBlock(
+                            latex = block.latex,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                        )
+                        is MarkdownRenderBlock.Markdown -> {
+                            val astTree = remember(block.content) {
+                                markdownParser.buildMarkdownTreeFromString(block.content)
+                            }
+                            astTree.children.fastForEach { child ->
+                                MarkdownNode(
+                                    node = child,
+                                    content = block.content,
+                                    copyMarkerMap = copyMarkerMap
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
+
+private sealed interface CopyMarkerRenderBlock {
+    data class Markdown(val content: String) : CopyMarkerRenderBlock
+    data class Copy(val rawSource: String) : CopyMarkerRenderBlock
+}
+
+private fun splitCopyMarkerBlocks(content: String, markers: List<CopyMarkerToken>): List<CopyMarkerRenderBlock> {
+    if (markers.isEmpty()) return listOf(CopyMarkerRenderBlock.Markdown(content))
+    val blocks = mutableListOf<CopyMarkerRenderBlock>()
+    var cursor = 0
+    markers.forEach { marker ->
+        val index = content.indexOf(marker.placeholder, startIndex = cursor)
+        if (index < 0) return@forEach
+        content.substring(cursor, index).takeIf(String::isNotBlank)?.let {
+            blocks += CopyMarkerRenderBlock.Markdown(it)
+        }
+        blocks += CopyMarkerRenderBlock.Copy(marker.rawSource)
+        cursor = index + marker.placeholder.length
+    }
+    content.substring(cursor).takeIf(String::isNotBlank)?.let {
+        blocks += CopyMarkerRenderBlock.Markdown(it)
+    }
+    return blocks
 }
 
 @Composable

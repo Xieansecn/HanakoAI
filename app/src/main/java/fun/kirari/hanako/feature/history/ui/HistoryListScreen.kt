@@ -92,8 +92,6 @@ import `fun`.kirari.hanako.core.model.loadHistoryBitmap
 import `fun`.kirari.hanako.feature.home.presentation.RegisterScrollToTopHandler
 import `fun`.kirari.hanako.core.ui.components.SectionCard
 import kotlinx.coroutines.launch
-import java.text.DateFormat
-import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,9 +107,10 @@ fun HistorySubScreen(
     onDeleteGroup: (String, (HistoryCommandResult) -> Unit) -> Unit = { _, _ -> },
     onSetGroups: (Set<String>, Set<String>, (HistoryCommandResult) -> Unit) -> Unit = { _, _, _ -> },
     onSetMarkerColor: (Set<String>, HistoryMarkerColor?, (HistoryCommandResult) -> Unit) -> Unit = { _, _, _ -> },
-    onCreateQuestionCard: (ProcessingResult) -> Unit = {}
+    onCreateQuestionCard: (ProcessingResult) -> Unit = {},
+    onCreateQuestionCards: (List<ProcessingResult>) -> Unit = {},
+    onOpenGroup: (String) -> Unit = {}
 ) {
-    var selectedGroupId by remember { mutableStateOf<String?>(null) }
     var actionTargetId by remember { mutableStateOf<String?>(null) }
     var groupPickerTargetIds by remember { mutableStateOf<Set<String>?>(null) }
     var deleteTargetId by remember { mutableStateOf<String?>(null) }
@@ -133,27 +132,26 @@ fun HistorySubScreen(
     }
     val metadataById = remember(settings.historyMetadata) { settings.historyMetadata.associateBy { it.historyId } }
 
-    BackHandler(enabled = pagerState.currentPage != 0 || selectedGroupId != null || selectionMode) {
+    BackHandler(enabled = pagerState.currentPage != 0 || selectionMode) {
         when {
             selectionMode -> { selectionMode = false; selectedIds = emptySet(); previewId = null }
-            selectedGroupId != null -> selectedGroupId = null
             else -> scope.launch { pagerState.animateScrollToPage(0) }
         }
     }
     RegisterScrollToTopHandler(route = scrollRoute) { scope.launch { listState.animateScrollToItem(0) } }
 
-    val visibleHistory = history.filter { result ->
-        when {
-            selectedGroupId == "__ungrouped__" -> settings.historyMetadataFor(result).groupIds.isEmpty()
-            selectedGroupId != null -> selectedGroupId in settings.historyMetadataFor(result).groupIds
-            else -> true
-        }
-    }
+    val visibleHistory = history
 
     Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = true,
+            modifier = Modifier.fillMaxSize(),
+            enter = slideInHorizontally { -it } + fadeIn(),
+            exit = slideOutHorizontally { -it } + fadeOut()
+        ) {
         Column(Modifier.fillMaxSize()) {
             TabRow(selectedTabIndex = pagerState.currentPage) {
-                listOf("历史记录", "分组").forEachIndexed { index, title ->
+                listOf("全部记录", "分组").forEachIndexed { index, title ->
                     Tab(
                         selected = pagerState.currentPage == index,
                         onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
@@ -174,7 +172,7 @@ fun HistorySubScreen(
                 ) {
                 item {
                     HistoryListHeader(
-                        title = if (selectedGroupId == null) "历史记录" else settings.historyGroups.firstOrNull { it.id == selectedGroupId }?.name ?: "历史记录",
+                        title = "全部记录",
                         storageText = formatHistorySize(historyStorageBytes(history)),
                         clearEnabled = history.isNotEmpty() && !selectionMode,
                         selectionMode = selectionMode,
@@ -185,7 +183,7 @@ fun HistorySubScreen(
                     )
                 }
                 if (visibleHistory.isEmpty()) {
-                    item { SectionCard(title = if (selectedGroupId == "__ungrouped__") "暂无未分组记录" else "暂无历史") { Text("悬浮窗处理过的记录会显示在这里。", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+                    item { SectionCard(title = "暂无历史") { Text("悬浮窗处理过的记录会显示在这里。", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
                 } else {
                     items(visibleHistory, key = { it.id }) { result ->
                         val selected = result.id in selectedIds
@@ -213,45 +211,24 @@ fun HistorySubScreen(
                     }
                 }
                 item { Spacer(modifier = Modifier.height(88.dp)) }
-                } else if (selectedGroupId != null) GroupDetailScreen(
-                    groupId = selectedGroupId!!,
-                    groups = settings.historyGroups,
-                    history = history,
-                    settings = settings,
-                    selectedIds = selectedIds,
-                    selectionMode = selectionMode,
-                    previewId = previewId,
-                    onBack = { selectedGroupId = null },
-                    onOpenHistoryDetail = onOpenHistoryDetail,
-                    onToggleSelection = { id -> selectedIds = selectedIds.toggle(id) },
-                    onLongPress = { result ->
-                        if (selectionMode) {
-                            previewId = result.id
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        } else {
-                            actionTargetId = result.id
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        }
-                    },
-                    onDismissPreview = { previewId = null }
-                ) else GroupBrowser(
+                } else GroupBrowser(
                     groups = settings.historyGroups,
                     history = history,
                     metadataById = metadataById,
-                    onSelectGroup = { id -> selectedGroupId = id.takeIf { it.isNotEmpty() } },
+                    onSelectGroup = { id -> id.takeIf { it.isNotEmpty() }?.let(onOpenGroup) },
                     onCreate = { showCreateGroup = true },
                     onRename = { renameTarget = it },
                     onDelete = { deleteGroupTarget = it }
                 )
             }
         }
-
+        }
         if (selectionMode) {
             SelectionDock(
                 selectedCount = selectedIds.size,
                 onMove = { groupPickerTargetIds = selectedIds },
                 onColor = { color -> onSetMarkerColor(selectedIds, color) {} },
-                onCreateCard = { selectedIds.forEach { id -> history.firstOrNull { it.id == id }?.let(onCreateQuestionCard) } },
+                onCreateCard = { onCreateQuestionCards(history.filter { it.id in selectedIds }) },
                 onDelete = { deleteTargetId = "__batch__" }
             )
         }
@@ -327,8 +304,8 @@ private fun HistoryListHeader(
         Text(if (selectionMode) "已选 $selectedCount 项" else title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.weight(1f))
         if (selectionMode) {
-            IconButton(onClick = onSelectAll) { Icon(Icons.Default.SelectAll, contentDescription = "全选") }
-            IconButton(onClick = onCloseSelection) { Icon(Icons.Default.ArrowBack, contentDescription = "退出多选") }
+            IconButton(onClick = onSelectAll) { Icon(Icons.Default.SelectAll, contentDescription = "全选", tint = MaterialTheme.colorScheme.primary) }
+            IconButton(onClick = onCloseSelection) { Icon(Icons.Default.ArrowBack, contentDescription = "退出多选", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             Text(storageText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = onClearHistory, enabled = clearEnabled) { Text("清空") }
@@ -363,7 +340,7 @@ private fun HistoryListItem(
                     StatusIcon(result.status)
                     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.weight(1f))
-                    Text(formatHistoryTime(metadata.lastActivityAtMillis), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatHistoryDateTime(metadata.lastActivityAtMillis), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(buildHistoryMetaLine(result), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(historyPreviewText(result), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -392,25 +369,23 @@ private fun HistoryListItem(
 @Composable private fun historyMarkerColor(color: HistoryMarkerColor): Color {
     val dark = isSystemInDarkTheme()
     return when (color) {
-        HistoryMarkerColor.MIST_BLUE -> Color(if (dark) 0xFFA9C4DD else 0xFF5F7892)
-        HistoryMarkerColor.SAGE -> Color(if (dark) 0xFFA9C9B1 else 0xFF607C6B)
-        HistoryMarkerColor.LILAC -> Color(if (dark) 0xFFC7B8D7 else 0xFF7C6F8F)
-        HistoryMarkerColor.OCHRE -> Color(if (dark) 0xFFD8C18A else 0xFF8A744A)
-        HistoryMarkerColor.ROSE -> Color(if (dark) 0xFFD9AEB8 else 0xFF986F78)
-        HistoryMarkerColor.TEAL -> Color(if (dark) 0xFF9DCECA else 0xFF4F7F7D)
-        HistoryMarkerColor.SLATE -> Color(if (dark) 0xFFB5C0C8 else 0xFF64707A)
+        HistoryMarkerColor.MIST_BLUE -> Color(if (dark) 0xFF8FC7F2 else 0xFF276C9E)
+        HistoryMarkerColor.SAGE -> Color(if (dark) 0xFF8FD1A2 else 0xFF2D7A43)
+        HistoryMarkerColor.LILAC -> Color(if (dark) 0xFFD1A8F0 else 0xFF78459B)
+        HistoryMarkerColor.OCHRE -> Color(if (dark) 0xFFF0C56E else 0xFF9A6500)
+        HistoryMarkerColor.ROSE -> Color(if (dark) 0xFFF0A2B3 else 0xFFB33D59)
+        HistoryMarkerColor.TEAL -> Color(if (dark) 0xFF70D3CC else 0xFF087B78)
+        HistoryMarkerColor.SLATE -> Color(if (dark) 0xFFC4CBD2 else 0xFF59636D)
     }
 }
 
 private fun buildHistoryMetaLine(result: ProcessingResult): String = buildList {
     add(result.route.displayName())
-    result.lastSearchAtMillis?.let { add("搜题 ${formatHistoryTime(it)}") }
+    result.lastSearchAtMillis?.let { add("搜题 ${formatHistoryDateTime(it)}") }
 }.joinToString(" · ")
 
-private fun formatHistoryTime(millis: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(millis))
-
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun HistoryActionSheet(result: ProcessingResult, selectedColor: HistoryMarkerColor?, onDismiss: () -> Unit, onMove: () -> Unit, onColor: (HistoryMarkerColor?) -> Unit, onMultiSelect: () -> Unit, onCreateCard: () -> Unit, onDelete: () -> Unit) {
+@Composable internal fun HistoryActionSheet(result: ProcessingResult, selectedColor: HistoryMarkerColor?, onDismiss: () -> Unit, onMove: () -> Unit, onColor: (HistoryMarkerColor?) -> Unit, onMultiSelect: () -> Unit, onCreateCard: () -> Unit, onDelete: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(result.assistantName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -435,7 +410,7 @@ private fun formatHistoryTime(millis: Long): String = DateFormat.getTimeInstance
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun GroupPickerSheet(groups: List<HistoryGroup>, initial: Set<String>, onDismiss: () -> Unit, onConfirm: (Set<String>) -> Unit, onCreateGroup: () -> Unit) {
+@Composable internal fun GroupPickerSheet(groups: List<HistoryGroup>, initial: Set<String>, onDismiss: () -> Unit, onConfirm: (Set<String>) -> Unit, onCreateGroup: () -> Unit) {
     var selected by remember(initial) { mutableStateOf(initial) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -454,14 +429,17 @@ private fun formatHistoryTime(millis: Long): String = DateFormat.getTimeInstance
 }
 
 @Composable private fun ColorGrid(selected: HistoryMarkerColor?, onSelect: (HistoryMarkerColor?) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(Modifier.fillMaxWidth()) {
         HistoryMarkerColor.entries.forEach { color ->
-            IconButton(onClick = { onSelect(if (selected == color) null else color) }) { Box(Modifier.size(24.dp).clip(CircleShape).background(historyMarkerColor(color))) }
+            IconButton(
+                onClick = { onSelect(if (selected == color) null else color) },
+                modifier = Modifier.weight(1f)
+            ) { Box(Modifier.size(24.dp).clip(CircleShape).background(historyMarkerColor(color))) }
         }
     }
 }
 
-@Composable private fun BoxScope.SelectionDock(selectedCount: Int, onMove: () -> Unit, onColor: (HistoryMarkerColor?) -> Unit, onCreateCard: () -> Unit, onDelete: () -> Unit) {
+@Composable internal fun BoxScope.SelectionDock(selectedCount: Int, onMove: () -> Unit, onColor: (HistoryMarkerColor?) -> Unit, onCreateCard: () -> Unit, onDelete: () -> Unit) {
     var colorsExpanded by remember { mutableStateOf(false) }
     Surface(Modifier.fillMaxWidth().align(Alignment.BottomCenter), color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 6.dp, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
@@ -486,33 +464,23 @@ private fun formatHistoryTime(millis: Long): String = DateFormat.getTimeInstance
 }
 
 @Composable
-private fun GroupDetailScreen(
+internal fun HistoryGroupDetailScreen(
     groupId: String,
-    groups: List<HistoryGroup>,
     history: List<ProcessingResult>,
     settings: AppSettings,
     selectedIds: Set<String>,
     selectionMode: Boolean,
     previewId: String?,
-    onBack: () -> Unit,
     onOpenHistoryDetail: (String) -> Unit,
     onToggleSelection: (String) -> Unit,
     onLongPress: (ProcessingResult) -> Unit,
     onDismissPreview: () -> Unit
 ) {
-    val title = if (groupId == "__ungrouped__") "未分组" else groups.firstOrNull { it.id == groupId }?.name ?: "分组"
     val records = history.filter { result ->
         if (groupId == "__ungrouped__") settings.historyMetadataFor(result).groupIds.isEmpty()
         else groupId in settings.historyMetadataFor(result).groupIds
     }
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回分组") }
-            Text(title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-        }
         if (records.isEmpty()) {
             SectionCard(title = "暂无记录", modifier = Modifier.padding(16.dp)) {
                 Text("加入这个分组的历史记录会显示在这里。", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -545,14 +513,17 @@ private fun GroupDetailScreen(
 
 @Composable private fun GroupBrowser(groups: List<HistoryGroup>, history: List<ProcessingResult>, metadataById: Map<String, `fun`.kirari.hanako.core.data.HistoryRecordMetadata>, onSelectGroup: (String) -> Unit, onCreate: () -> Unit, onRename: (HistoryGroup) -> Unit, onDelete: (HistoryGroup) -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("管理分组", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold); Spacer(Modifier.weight(1f)); IconButton(onClick = onCreate) { Icon(Icons.Default.Folder, "新建分组", tint = MaterialTheme.colorScheme.primary) } }
-        GroupRow("全部记录", history.size, onClick = { onSelectGroup("") })
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("管理分组", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onCreate) { Text("新建分组", color = MaterialTheme.colorScheme.primary) }
+        }
         GroupRow("未分组", history.count { metadataById[it.id]?.groupIds.isNullOrEmpty() }, onClick = { onSelectGroup("__ungrouped__") })
         groups.forEach { group ->
             Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                 GroupRow(group.name, history.count { group.id in (metadataById[it.id]?.groupIds ?: emptyList()) }, onClick = { onSelectGroup(group.id) }, modifier = Modifier.weight(1f))
-                IconButton(onClick = { onRename(group) }) { Icon(Icons.Default.Edit, "重命名 ${group.name}") }
-                IconButton(onClick = { onDelete(group) }) { Icon(Icons.Default.DeleteOutline, "删除 ${group.name}") }
+                IconButton(onClick = { onRename(group) }) { Icon(Icons.Default.Edit, "重命名 ${group.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                IconButton(onClick = { onDelete(group) }) { Icon(Icons.Default.DeleteOutline, "删除 ${group.name}", tint = MaterialTheme.colorScheme.error) }
             }
         }
     }
@@ -568,12 +539,12 @@ private fun GroupDetailScreen(
     }
 }
 
-@Composable private fun GroupNameDialog(title: String, initial: String = "", onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+@Composable internal fun GroupNameDialog(title: String, initial: String = "", onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var value by remember(initial) { mutableStateOf(initial) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { androidx.compose.material3.OutlinedTextField(value, { value = it }, singleLine = true, label = { Text("分组名称") }) }, confirmButton = { TextButton(onClick = { onConfirm(value) }, enabled = value.isNotBlank()) { Text("保存") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
 }
 
-@Composable private fun ConfirmDialog(title: String, message: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+@Composable internal fun ConfirmDialog(title: String, message: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Text(message) }, confirmButton = { TextButton(onClick = onConfirm) { Text("确认", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
 }
 

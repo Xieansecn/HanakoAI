@@ -3,6 +3,7 @@ package `fun`.kirari.hanako.feature.history.presentation
 import `fun`.kirari.hanako.core.data.AppSettings
 import `fun`.kirari.hanako.core.data.HistoryCommandResult
 import `fun`.kirari.hanako.core.data.HistoryMarkerColor
+import `fun`.kirari.hanako.core.data.QuestionCardArtifact
 import `fun`.kirari.hanako.core.data.ModelSelection
 import `fun`.kirari.hanako.core.data.ModelPurpose
 import `fun`.kirari.hanako.core.data.SettingsRepository
@@ -142,11 +143,11 @@ internal class HistoryWorkflowController(
         scope.launch { onResult(settingsRepository.setHistoryMarkerColor(recordIds, color)) }
     }
 
-    fun createQuestionCard(resultId: String) {
+    fun createQuestionCard(resultId: String, onComplete: (QuestionCardArtifact?) -> Unit = {}) {
         val exporter = questionCardExporter ?: return
         scope.launch {
-            val result = settings.value.history.firstOrNull { it.id == resultId } ?: return@launch
-            exporter.export(result)
+            val result = settings.value.history.firstOrNull { it.id == resultId } ?: return@launch onComplete(null)
+            onComplete(exporter.export(result).getOrNull())
         }
     }
 }

@@ -6,6 +6,7 @@ import `fun`.kirari.hanako.core.model.ProcessingRoute
 import `fun`.kirari.hanako.core.model.ProcessingStatus
 import `fun`.kirari.hanako.core.model.latestAnswerText
 import java.io.File
+import java.util.Calendar
 import java.util.Locale
 
 internal fun historyPreviewText(result: ProcessingResult): String {
@@ -60,4 +61,43 @@ internal fun formatHistorySize(bytes: Long): String {
     if (kb < 1024.0) return String.format(Locale.US, "%.1fKB", kb)
     val mb = kb / 1024.0
     return String.format(Locale.US, "%.1fMB", mb)
+}
+
+/** Compact, local-time label that stays readable in a dense history card. */
+internal fun formatHistoryDateTime(millis: Long, nowMillis: Long = System.currentTimeMillis()): String {
+    val now = Calendar.getInstance().apply { timeInMillis = nowMillis }
+    val date = Calendar.getInstance().apply { timeInMillis = millis }
+    val todayStart = dayStart(now)
+    val dateStart = dayStart(date)
+    val dayDelta = ((todayStart.timeInMillis - dateStart.timeInMillis) / DAY_MILLIS).toInt()
+    val clock = "%02d:%02d".format(Locale.CHINA, date.get(Calendar.HOUR_OF_DAY), date.get(Calendar.MINUTE))
+
+    if (dayDelta == 0) {
+        val elapsedMinutes = ((nowMillis - millis).coerceAtLeast(0L) / MINUTE_MILLIS)
+        return when {
+            elapsedMinutes < 1L -> "刚刚"
+            elapsedMinutes < 60L -> "${elapsedMinutes}分钟前"
+            else -> clock
+        }
+    }
+    if (dayDelta == 1) return "昨天 $clock"
+    if (dayDelta == 2) return "前天 $clock"
+
+    val monthDay = "${date.get(Calendar.MONTH) + 1}月${date.get(Calendar.DAY_OF_MONTH)}日 $clock"
+    return if (date.get(Calendar.YEAR) == now.get(Calendar.YEAR)) {
+        monthDay
+    } else {
+        "${date.get(Calendar.YEAR) % 100}年$monthDay"
+    }
+}
+
+private const val MINUTE_MILLIS = 60_000L
+private const val DAY_MILLIS = 24 * 60 * MINUTE_MILLIS
+
+private fun dayStart(source: Calendar): Calendar = Calendar.getInstance().apply {
+    timeInMillis = source.timeInMillis
+    set(Calendar.HOUR_OF_DAY, 0)
+    set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0)
+    set(Calendar.MILLISECOND, 0)
 }

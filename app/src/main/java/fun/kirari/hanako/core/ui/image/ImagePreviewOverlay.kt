@@ -211,7 +211,7 @@ fun ImagePreviewOverlay(
                         val saved = saveBitmapToPictures(context, bitmap, "$fileName.png")
                         Toast.makeText(
                             context,
-                            if (saved) "已保存到相册" else "保存失败",
+                            if (saved) "已保存 1 张图片" else "保存失败，请检查相册权限或存储空间",
                             Toast.LENGTH_SHORT
                         ).show()
                         showSheet = false
@@ -306,7 +306,7 @@ private fun BottomSheetItem(
     }
 }
 
-private fun saveBitmapToPictures(context: Context, bitmap: Bitmap, fileName: String): Boolean {
+internal fun saveBitmapToPictures(context: Context, bitmap: Bitmap, fileName: String): Boolean {
     val resolver = context.contentResolver
     val values = ContentValues().apply {
         put(MediaStore.Images.Media.DISPLAY_NAME, fileName)

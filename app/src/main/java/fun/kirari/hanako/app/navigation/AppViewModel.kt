@@ -20,6 +20,7 @@ import `fun`.kirari.hanako.BuildConfig
 import `fun`.kirari.hanako.core.data.AppSettings
 import `fun`.kirari.hanako.core.data.HistoryCommandResult
 import `fun`.kirari.hanako.core.data.HistoryMarkerColor
+import `fun`.kirari.hanako.core.data.QuestionCardArtifact
 import `fun`.kirari.hanako.core.data.AssistantPreset
 import `fun`.kirari.hanako.core.data.AutomationSettings
 import `fun`.kirari.hanako.core.data.ModelPurpose
@@ -269,7 +270,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setHistoryMarkerColor(recordIds: Set<String>, color: HistoryMarkerColor?, onResult: (HistoryCommandResult) -> Unit = {}) =
         historyWorkflowController.setMarkerColor(recordIds, color, onResult)
 
-    fun createQuestionCard(resultId: String) = historyWorkflowController.createQuestionCard(resultId)
+    fun createQuestionCard(resultId: String, onComplete: (QuestionCardArtifact?) -> Unit = {}) =
+        historyWorkflowController.createQuestionCard(resultId, onComplete)
 
     fun testProviderConnection(provider: ModelProviderConfig) {
         providerRuntimeController.testProviderConnection(provider)
