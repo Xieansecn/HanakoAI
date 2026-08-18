@@ -21,6 +21,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import java.text.DateFormat
+import java.util.Date
 
 class QuestionCardExporter(
     private val context: Context,
@@ -49,7 +51,11 @@ class QuestionCardExporter(
         composeView.setContent {
             MaterialTheme {
                 QuestionCardContent(
-                    title = context.getString(android.R.string.untitled),
+                    title = when (val title = metadata.title) {
+                        `fun`.kirari.hanako.core.data.HistoryTitle.Assistant -> result.assistantName
+                        is `fun`.kirari.hanako.core.data.HistoryTitle.Custom -> title.text.ifBlank { result.assistantName }
+                        is `fun`.kirari.hanako.core.data.HistoryTitle.AiSummary -> title.text.ifBlank { result.assistantName }
+                    },
                     assistantName = result.assistantName,
                     answer = result.latestAnswerText(),
                     question = result.extractedText,
@@ -94,8 +100,8 @@ private fun QuestionCardContent(
             .background(MaterialTheme.colorScheme.surface)
             .padding(28.dp)
     ) {
-        androidx.compose.material3.Text(assistantName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
-        androidx.compose.material3.Text("${createdAtMillis}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.material3.Text(title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+        androidx.compose.material3.Text(assistantName + " · " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(createdAtMillis)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (question.isNotBlank()) {
             androidx.compose.material3.Text("题目", style = MaterialTheme.typography.titleMedium, modifier = androidx.compose.ui.Modifier.padding(top = 20.dp))
             MarkdownLatexText(question, modifier = androidx.compose.ui.Modifier.padding(top = 8.dp))

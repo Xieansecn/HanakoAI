@@ -39,6 +39,7 @@ internal class WorkflowTaskManager(
     private val taskRegistry: WorkflowTaskRegistry,
     private val workflowFactory: HanakoWorkflowEngine,
     private val conversationWorkflow: ConversationWorkflowEngine,
+    private val titleSummaryService: TitleSummaryService? = null,
     private val scope: CoroutineScope,
     private val processingTimeoutMillis: Long = 90_000L
 ) {
@@ -112,6 +113,9 @@ internal class WorkflowTaskManager(
             }.onSuccess { result ->
                 AppDebugLogStore.i(tag, "answer task success taskId=$taskId historyId=${result.id}")
                 resultStore.upsert(result)
+                titleSummaryService?.let { service ->
+                    scope.launch { service.generate(result, models) }
+                }
                 taskRegistry.mark(taskId, WorkflowTaskStatus.SUCCESS)
             }.onFailure { error ->
                 if (error is CancellationException) {

@@ -39,6 +39,10 @@ internal class WorkflowContainer(
         repository = historyRepository,
         scope = scope
     )
+    private val titleSummaryService = TitleSummaryService(
+        repository = historyRepository,
+        client = unifiedLLMClient
+    )
     private val taskRegistry = WorkflowTaskRegistry()
     private val taskManager = WorkflowTaskManager(
         repository = historyRepository,
@@ -46,6 +50,7 @@ internal class WorkflowContainer(
         taskRegistry = taskRegistry,
         workflowFactory = workflowFactory,
         conversationWorkflow = conversationWorkflow,
+        titleSummaryService = titleSummaryService,
         scope = scope
     )
     private val interruptedTaskReconciliation = scope.launch {

@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,6 +58,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -121,6 +123,12 @@ fun HistorySubScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
+    LaunchedEffect(previewId) {
+        if (previewId != null) {
+            kotlinx.coroutines.delay(900)
+            previewId = null
+        }
+    }
     val metadataById = remember(settings.historyMetadata) { settings.historyMetadata.associateBy { it.historyId } }
 
     BackHandler(enabled = groupsPage || selectionMode) {
@@ -245,6 +253,7 @@ fun HistorySubScreen(
     if (actionTarget != null) {
         HistoryActionSheet(
             result = actionTarget,
+            selectedColor = settings.historyMetadataFor(actionTarget).markerColor,
             onDismiss = { actionTargetId = null },
             onMove = { groupPickerTargetIds = setOf(actionTarget.id); actionTargetId = null },
             onColor = { color -> onSetMarkerColor(setOf(actionTarget.id), color) {}; actionTargetId = null },
@@ -363,7 +372,7 @@ private fun HistoryListItem(
     val (icon, color) = when (status) {
         ProcessingStatus.SUCCESS -> Icons.Default.Check to MaterialTheme.colorScheme.tertiary
         ProcessingStatus.RUNNING -> Icons.Default.Memory to MaterialTheme.colorScheme.primary
-        ProcessingStatus.ERROR, ProcessingStatus.TIMEOUT -> Icons.Default.DeleteOutline to MaterialTheme.colorScheme.error
+        ProcessingStatus.ERROR, ProcessingStatus.TIMEOUT -> Icons.Default.Warning to MaterialTheme.colorScheme.error
     }
     Icon(icon, contentDescription = status.displayName(), tint = color, modifier = Modifier.size(18.dp))
 }
@@ -393,14 +402,14 @@ private fun buildHistoryMetaLine(result: ProcessingResult): String = buildList {
 private fun formatHistoryTime(millis: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(millis))
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun HistoryActionSheet(result: ProcessingResult, onDismiss: () -> Unit, onMove: () -> Unit, onColor: (HistoryMarkerColor?) -> Unit, onMultiSelect: () -> Unit, onCreateCard: () -> Unit, onDelete: () -> Unit) {
+@Composable private fun HistoryActionSheet(result: ProcessingResult, selectedColor: HistoryMarkerColor?, onDismiss: () -> Unit, onMove: () -> Unit, onColor: (HistoryMarkerColor?) -> Unit, onMultiSelect: () -> Unit, onCreateCard: () -> Unit, onDelete: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(result.assistantName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text("选择对这条记录的操作", color = MaterialTheme.colorScheme.onSurfaceVariant)
             ActionRow(Icons.Default.Folder, "移动到分组", onMove)
             Text("标记颜色", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-            ColorGrid(selected = null, onSelect = onColor)
+            ColorGrid(selected = selectedColor, onSelect = onColor)
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             ActionRow(Icons.Default.SelectAll, "多选", onMultiSelect)
             ActionRow(Icons.Default.Share, "创建题目卡片", onCreateCard)
