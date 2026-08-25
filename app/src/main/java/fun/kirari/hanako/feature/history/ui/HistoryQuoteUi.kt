@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.core.model.ContentAnchor
@@ -99,7 +100,13 @@ internal fun HistoryInteractiveMarkdown(
             val underlined = anchor.blockId in underlinedBlockIds
             val primaryColor = MaterialTheme.colorScheme.primary
             val blockModifier = Modifier
-                .fillMaxWidth()
+                .then(
+                    if (block.kind == RichTextBlockKind.DISPLAY_MATH) {
+                        Modifier.wrapContentWidth(unbounded = true)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    }
+                )
                 .clip(RoundedCornerShape(10.dp))
                 .padding(vertical = if (block.kind == RichTextBlockKind.DISPLAY_MATH) 4.dp else 1.dp)
                 .then(
@@ -142,7 +149,10 @@ internal fun HistoryInteractiveMarkdown(
                 )
             Box(modifier = blockModifier) {
                 if (block.kind == RichTextBlockKind.DISPLAY_MATH) {
-                    MarkdownLatexText(block.rawMarkdown, modifier = Modifier.fillMaxWidth())
+                    MarkdownLatexText(
+                        block.rawMarkdown,
+                        displayMathFillMaxWidth = false
+                    )
                 } else {
                     MarkdownLatexText(block.rawMarkdown, modifier = Modifier.fillMaxWidth())
                 }

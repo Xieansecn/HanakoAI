@@ -68,7 +68,8 @@ fun MarkdownLatexText(
     content: String,
     modifier: Modifier = Modifier,
     style: TextStyle = androidx.compose.material3.LocalTextStyle.current,
-    extractCopyMarkers: Boolean = true
+    extractCopyMarkers: Boolean = true,
+    displayMathFillMaxWidth: Boolean = true
 ) {
     val parsed = remember(content, extractCopyMarkers) { parseMarkdown(content, extractCopyMarkers) }
     val copyMarkerMap = remember(parsed.copyMarkers) {
@@ -87,7 +88,8 @@ fun MarkdownLatexText(
                             content = block.content,
                             modifier = Modifier.fillMaxWidth(),
                             style = style,
-                            extractCopyMarkers = false
+                            extractCopyMarkers = false,
+                            displayMathFillMaxWidth = displayMathFillMaxWidth
                         )
                         is CopyMarkerRenderBlock.Copy -> CopyMarkerBlock(rawSource = block.rawSource)
                     }
@@ -99,7 +101,8 @@ fun MarkdownLatexText(
                     when (block) {
                         is MarkdownRenderBlock.DisplayMath -> LatexBlock(
                             latex = block.latex,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                            modifier = (if (displayMathFillMaxWidth) Modifier.fillMaxWidth() else Modifier)
+                                .padding(vertical = 8.dp)
                         )
                         is MarkdownRenderBlock.Markdown -> {
                             val astTree = remember(block.content) {
