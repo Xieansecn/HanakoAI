@@ -95,12 +95,18 @@ fun AnswerVersion.stableFor(messageId: String, index: Int): AnswerVersion {
 
 fun ProcessingResult.withStableAnswerVersionIds(): ProcessingResult {
     val initialMessageId = "$id:initial"
-    val stableVersions = displayedAnswerVersions().mapIndexed { index, version ->
+    val sourceVersions = answerVersions.ifEmpty {
+        answer.takeIf(String::isNotBlank)?.let { listOf(AnswerVersion(it, createdAtMillis)) }.orEmpty()
+    }
+    val stableVersions = sourceVersions.mapIndexed { index, version ->
         version.stableFor(initialMessageId, index)
     }
     val stableTurns = followUpTurns.map { turn ->
+        val turnSourceVersions = turn.assistantVersions.ifEmpty {
+            turn.assistantText.takeIf(String::isNotBlank)?.let { listOf(AnswerVersion(it, turn.createdAtMillis)) }.orEmpty()
+        }
         turn.copy(
-            assistantVersions = turn.displayedAssistantVersions().mapIndexed { index, version ->
+            assistantVersions = turnSourceVersions.mapIndexed { index, version ->
                 version.stableFor(turn.id, index)
             }
         )

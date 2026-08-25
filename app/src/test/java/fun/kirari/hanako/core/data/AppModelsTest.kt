@@ -8,6 +8,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppModelsTest {
+    @Test
+    fun normalize_advancesHistoryDataSchemaForQuoteFields() {
+        assertEquals(StorageSchema.CURRENT_APP_DATA_VERSION, AppSettings(schemaVersion = 2).normalize().schemaVersion)
+        assertTrue(StorageSchema.ANSWER_VERSION_IDS_MIGRATION in StorageSchema.completedMigrations)
+        assertTrue(StorageSchema.QUOTED_FRAGMENTS_MIGRATION in StorageSchema.completedMigrations)
+    }
 
     @Test
     fun defaultAssistants_onlyKeepsProblemSolvingAssistant() {
