@@ -329,9 +329,11 @@ fun AppSettings.normalize(): AppSettings {
         .distinctBy { it.name.lowercase() }
     val normalizedHistoryResults = history.map { it.withStableAnswerVersionIds() }
     val normalizedLastResult = lastResult?.withStableAnswerVersionIds()
+    val canonicalHistory = (listOfNotNull(normalizedLastResult) + normalizedHistoryResults)
+        .distinctBy { it.id }
     val normalizedHistory = copy(
-        history = normalizedHistoryResults,
-        lastResult = normalizedLastResult,
+        history = canonicalHistory,
+        lastResult = canonicalHistory.firstOrNull(),
         historyGroups = normalizedGroups
     )
         .normalizedHistoryMetadata()
@@ -362,8 +364,8 @@ fun AppSettings.normalize(): AppSettings {
                 fallbackProvider.visionModel
             } ?: fallbackProvider?.visionModel.orEmpty()
         ),
-        lastResult = normalizedLastResult,
-        history = normalizedHistoryResults,
+        lastResult = canonicalHistory.firstOrNull(),
+        history = canonicalHistory,
         historyGroups = normalizedGroups,
         historyMetadata = normalizedHistory
     )

@@ -66,7 +66,6 @@ internal class WorkflowResultStore(
         _liveResults.value[historyId]?.let { return it }
         val settings = repository.read()
         return settings.history.firstOrNull { it.id == historyId }
-            ?: settings.lastResult?.takeIf { it.id == historyId }
     }
 
     fun remove(historyId: String) {

@@ -1,14 +1,11 @@
 package `fun`.kirari.hanako.core.network
 
 import `fun`.kirari.hanako.core.data.ModelProviderConfig
-import `fun`.kirari.hanako.core.data.KIRARI_PROVIDER_ID
 import `fun`.kirari.hanako.core.data.SettingsStore
 import `fun`.kirari.hanako.core.debug.AppDebugLogStore
 import `fun`.kirari.llm.core.ChatMessage
 import `fun`.kirari.llm.core.LlmClient
 import `fun`.kirari.llm.core.LlmEvent
-import `fun`.kirari.llm.core.ProviderConfig
-import `fun`.kirari.llm.core.ProviderKind
 import `fun`.kirari.llm.core.StreamRequest
 import `fun`.kirari.llm.core.ToolDef
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +19,7 @@ internal class UnifiedLLMClient(
 ) {
     private val tag = "HanakoUnifiedLLM"
     private val coreClient = LlmClient(clientProvider, HanakoLlmLogger)
+    private val providerResolver = ProviderConfigResolver(kirariAuthManager, settingsStore)
 
     suspend fun stream(
         provider: ModelProviderConfig,
@@ -34,26 +32,7 @@ internal class UnifiedLLMClient(
         trustAllHttpsCertificates: Boolean = false
     ): Flow<LlmEvent> {
         AppDebugLogStore.i(tag, "stream provider=${provider.kind} model=$model imageCount=${imagesBase64.size} hasTools=${tools != null} trustAllHttps=$trustAllHttpsCertificates")
-        val resolvedProvider = when (provider.kind) {
-            ProviderKind.KIRARI_NETWORK -> {
-                val manager = requireNotNull(kirariAuthManager) { "KirariAuthManager is required for Kirari provider" }
-                val store = requireNotNull(settingsStore) { "SettingsStore is required for Kirari provider" }
-                val settings = store.read()
-                val accessToken = manager.ensureValidAccessToken(
-                    settings = settings,
-                    trustAllHttpsCertificates = trustAllHttpsCertificates
-                )
-                require(accessToken.isNotBlank()) { "请先登录 The Kirari Network" }
-                val baseUrl = settings.availableKirariServerUrl()
-                ProviderConfig(
-                    kind = ProviderKind.KIRARI_NETWORK,
-                    baseUrl = baseUrl.trimEnd('/') + "/api/llm",
-                    apiKey = accessToken,
-                    headers = mapOf("Accept" to "application/json, text/event-stream")
-                )
-            }
-            else -> provider.toCoreProvider()
-        }
+        val resolvedProvider = providerResolver.resolve(provider, trustAllHttpsCertificates)
 
         return coreClient.stream(
             StreamRequest(
@@ -78,26 +57,7 @@ internal class UnifiedLLMClient(
         trustAllHttpsCertificates: Boolean = false
     ): Flow<LlmEvent> {
         AppDebugLogStore.i(tag, "streamMessages provider=${provider.kind} model=$model messageCount=${messages.size} hasTools=${tools != null} trustAllHttps=$trustAllHttpsCertificates")
-        val resolvedProvider = when (provider.kind) {
-            ProviderKind.KIRARI_NETWORK -> {
-                val manager = requireNotNull(kirariAuthManager) { "KirariAuthManager is required for Kirari provider" }
-                val store = requireNotNull(settingsStore) { "SettingsStore is required for Kirari provider" }
-                val settings = store.read()
-                val accessToken = manager.ensureValidAccessToken(
-                    settings = settings,
-                    trustAllHttpsCertificates = trustAllHttpsCertificates
-                )
-                require(accessToken.isNotBlank()) { "请先登录 The Kirari Network" }
-                val baseUrl = settings.availableKirariServerUrl()
-                ProviderConfig(
-                    kind = ProviderKind.KIRARI_NETWORK,
-                    baseUrl = baseUrl.trimEnd('/') + "/api/llm",
-                    apiKey = accessToken,
-                    headers = mapOf("Accept" to "application/json, text/event-stream")
-                )
-            }
-            else -> provider.toCoreProvider()
-        }
+        val resolvedProvider = providerResolver.resolve(provider, trustAllHttpsCertificates)
         return coreClient.stream(
             StreamRequest(
                 provider = resolvedProvider,
@@ -110,17 +70,4 @@ internal class UnifiedLLMClient(
         )
     }
 
-    private fun ModelProviderConfig.toCoreProvider(): ProviderConfig {
-        return ProviderConfig(
-            kind = kind,
-            baseUrl = baseUrl,
-            apiKey = apiKey
-        )
-    }
-
-    private fun `fun`.kirari.hanako.core.data.AppSettings.availableKirariServerUrl(): String {
-        return kirari.serverUrl.trim().ifBlank {
-            providers.firstOrNull { it.id == KIRARI_PROVIDER_ID }?.baseUrl?.trim().orEmpty()
-        }
-    }
 }
