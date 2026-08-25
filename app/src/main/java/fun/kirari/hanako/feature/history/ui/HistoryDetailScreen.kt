@@ -153,6 +153,9 @@ fun HistoryDetailScreen(
             val positioned = blockRects[quote.anchor.blockId] ?: HistoryRenderedBlock(quote.anchor, Rect())
             focusedBlock = positioned
             menuBlock = positioned
+            historyMessageItemIndex(result, screenshots, quote.anchor.messageId)?.let { itemIndex ->
+                coroutineScope.launch { listState.animateScrollToItem(itemIndex) }
+            }
         },
         onSendFollowUp = onSendFollowUp?.let { send ->
             {
@@ -271,4 +274,32 @@ fun HistoryDetailScreen(
             }
         )
     }
+}
+
+private fun historyMessageItemIndex(
+    result: ProcessingResult,
+    screenshots: List<android.graphics.Bitmap>,
+    messageId: String
+): Int? {
+    var index = 1 // header
+    if (screenshots.isNotEmpty()) index++
+    if (result.route == `fun`.kirari.hanako.core.model.ProcessingRoute.OCR_THEN_LLM) {
+        if (messageId == "${result.id}:initial-question") return index
+        index++
+    }
+    if (result.detail.isNotBlank()) index++
+    if (result.automationAction != null || result.automationThought.isNotBlank()) {
+        index++
+        if (result.automationAction != null) index++
+    } else {
+        if (messageId == "${result.id}:initial-answer") return index
+        index++
+    }
+    if (result.followUpTurns.isNotEmpty()) {
+        index++ // continuation title
+        result.followUpTurns.forEachIndexed { turnIndex, turn ->
+            if (turn.id == messageId) return index + turnIndex
+        }
+    }
+    return null
 }
