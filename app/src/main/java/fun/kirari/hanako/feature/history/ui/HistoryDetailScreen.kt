@@ -203,7 +203,7 @@ fun HistoryDetailScreen(
             menuProgress.snapTo(0f)
             menuProgress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(260, easing = FastOutSlowInEasing)
+                animationSpec = tween(130, easing = FastOutSlowInEasing)
             )
         }
         val progress = menuProgress.value

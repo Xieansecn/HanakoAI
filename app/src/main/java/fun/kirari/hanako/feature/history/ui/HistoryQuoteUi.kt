@@ -19,7 +19,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.core.model.ContentAnchor
@@ -120,7 +120,7 @@ internal fun HistoryInteractiveMarkdown(
                     else Modifier
                 )
                 .onGloballyPositioned { coordinates ->
-                    val position = coordinates.positionInRoot()
+                    val position = coordinates.positionInWindow()
                     val size = coordinates.size
                     val positioned = HistoryRenderedBlock(
                         anchor,
