@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -91,12 +94,13 @@ internal fun HistoryInteractiveMarkdown(
                     )
                 )
             }
-            val rendered = remember(anchor) { HistoryRenderedBlock(anchor, Rect()) }
+            var currentRect by remember(anchor) { mutableStateOf(Rect()) }
             val focused = highlightedBlockId == anchor.blockId
             val underlined = anchor.blockId in underlinedBlockIds
             val primaryColor = MaterialTheme.colorScheme.primary
             val blockModifier = Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
                 .padding(vertical = if (block.kind == RichTextBlockKind.DISPLAY_MATH) 4.dp else 1.dp)
                 .then(
                     if (underlined) Modifier.drawBehind {
@@ -125,14 +129,15 @@ internal fun HistoryInteractiveMarkdown(
                             (position.x + size.width).toInt(), (position.y + size.height).toInt()
                         )
                     )
+                    currentRect = positioned.rect
                     onBlockPositioned(positioned)
                 }
                 .combinedClickable(
                     onClick = {
-                        if (underlined) onBlockFocused(rendered)
+                        if (underlined) onBlockFocused(HistoryRenderedBlock(anchor, currentRect))
                     },
                     onLongClick = {
-                        onBlockFocused(rendered)
+                        onBlockFocused(HistoryRenderedBlock(anchor, currentRect))
                     }
                 )
             Box(modifier = blockModifier) {
