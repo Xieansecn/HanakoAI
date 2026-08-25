@@ -8,6 +8,9 @@ import `fun`.kirari.hanako.core.model.FollowUpTurn
 import `fun`.kirari.hanako.core.model.AnswerVersion
 import `fun`.kirari.hanako.core.model.ProcessingResult
 import `fun`.kirari.hanako.core.model.ProcessingRoute
+import `fun`.kirari.hanako.core.model.ContentAnchor
+import `fun`.kirari.hanako.core.model.QuotedFragment
+import `fun`.kirari.hanako.core.model.RichTextBlockKind
 import `fun`.kirari.hanako.solve.model.ConversationIntent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.jsonArray
@@ -83,6 +86,34 @@ class ConversationWorkflowTest {
         )
         assertEquals("", prepared.startedResult.followUpTurns.last().assistantText)
         assertEquals("retry", prepared.messages.last().text())
+    }
+
+    @Test
+    fun prepareTurn_keepsPlainUserTextAndAddsQuotedSnapshotToPrompt() = runTest {
+        val quote = QuotedFragment(
+            anchor = ContentAnchor(
+                historyId = "history-1",
+                messageId = "answer",
+                answerVersionId = "version-1",
+                blockId = "block-1",
+                blockKind = RichTextBlockKind.DISPLAY_MATH,
+                sourceRevision = 1L,
+                rawMarkdown = "x^2 + y^2",
+                previewLabel = "[公式]"
+            )
+        )
+        val prepared = workflow.prepareTurn(
+            existingResult = baseResult(),
+            models = models(),
+            intent = ConversationIntent.NewTurn("请解释", listOf(quote)),
+            turnId = "turn-with-quote"
+        )
+
+        assertEquals("请解释", prepared.startedResult.followUpTurns.last().userText)
+        assertEquals(listOf(quote), prepared.startedResult.followUpTurns.last().quotedFragments)
+        assertTrue(prepared.messages.last().text().contains("[引用片段]"))
+        assertTrue(prepared.messages.last().text().contains("x^2 + y^2"))
+        assertTrue(prepared.messages.last().text().endsWith("请解释"))
     }
 
     private fun baseResult() = ProcessingResult(

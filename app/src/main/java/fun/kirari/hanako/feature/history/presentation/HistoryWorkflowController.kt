@@ -9,6 +9,7 @@ import `fun`.kirari.hanako.core.data.ModelPurpose
 import `fun`.kirari.hanako.core.data.SettingsRepository
 import `fun`.kirari.hanako.core.data.modelSelectionFor
 import `fun`.kirari.hanako.core.model.ProcessingResult
+import `fun`.kirari.hanako.core.model.QuotedFragment
 import `fun`.kirari.hanako.core.model.ProcessingRoute
 import `fun`.kirari.hanako.solve.application.SolveOperations
 import `fun`.kirari.hanako.feature.history.application.QuestionCardExporter
@@ -98,12 +99,13 @@ internal class HistoryWorkflowController(
         }
     }
 
-    fun sendHistoryFollowUp(resultId: String, prompt: String) {
+    fun sendHistoryFollowUp(resultId: String, prompt: String, quotedFragments: List<QuotedFragment> = emptyList()) {
         scope.launch {
             solveOperations.continueConversation(
                 settings = settings.value,
                 historyId = resultId,
                 prompt = prompt,
+                quotedFragments = quotedFragments,
                 modelSelection = _conversationModelSelections.value[resultId]
             )
         }

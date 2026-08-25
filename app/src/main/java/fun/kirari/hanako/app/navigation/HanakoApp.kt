@@ -482,8 +482,8 @@ fun HanakoApp(viewModel: AppViewModel) {
                                 (operation as? HistoryDetailOperation.RegeneratingInitialAnswer)?.answerVersionIndex,
                             conversationModelLabel = detailState?.conversationModelLabel ?: "选择模型",
                             onRegenerate = { viewModel.regenerateHistoryResult(it.id) },
-                            onSendFollowUp = { prompt ->
-                                resultId?.let { viewModel.sendHistoryFollowUp(it, prompt) }
+                            onSendFollowUp = { prompt, quotedFragments ->
+                                resultId?.let { viewModel.sendHistoryFollowUp(it, prompt, quotedFragments) }
                             },
                             onSelectConversationModel = {
                                 if (resultId != null && conversationModelPurpose != null) {

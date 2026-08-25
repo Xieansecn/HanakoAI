@@ -156,7 +156,10 @@ internal class ConversationWorkflow(
         messages += userMessage(initialPrompt, images)
         messages += textMessage(role = "assistant", text = result.initialAssistantContext())
         result.followUpTurns.forEach { followUp ->
-            messages += textMessage(role = "user", text = followUp.userText)
+            messages += textMessage(
+                role = "user",
+                text = buildQuotedPrompt(followUp.userText, followUp.quotedFragments)
+            )
             val assistantText = followUp.latestAssistantText()
             if (followUp.completed && assistantText.isNotBlank() && followUp.errorMessage == null) {
                 messages += textMessage(role = "assistant", text = assistantText)

@@ -34,6 +34,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.core.model.ProcessingEvent
+import `fun`.kirari.hanako.core.model.ContentAnchor
+import `fun`.kirari.hanako.core.model.QuotedFragment
 import `fun`.kirari.hanako.core.ui.richtext.MarkdownLatexText
 import kotlin.math.roundToInt
 
@@ -109,9 +111,34 @@ internal fun HistoryScreenshots(
 }
 
 @Composable
-internal fun HistoryMarkdownOrEmpty(content: String) {
+internal fun HistoryMarkdownOrEmpty(
+    content: String,
+    historyId: String = "",
+    messageId: String = "",
+    answerVersionId: String? = null,
+    sourceRevision: Long = 0L,
+    highlightedBlockId: String? = null,
+    underlinedBlockIds: Set<String> = emptySet(),
+    onBlockFocused: ((HistoryRenderedBlock) -> Unit)? = null,
+    onBlockPositioned: ((HistoryRenderedBlock) -> Unit)? = null
+) {
     if (content.isNotBlank()) {
-        MarkdownLatexText(content = content, modifier = Modifier.fillMaxWidth())
+        if (historyId.isNotBlank() && messageId.isNotBlank() && onBlockFocused != null && onBlockPositioned != null) {
+            HistoryInteractiveMarkdown(
+                content = content,
+                historyId = historyId,
+                messageId = messageId,
+                answerVersionId = answerVersionId,
+                sourceRevision = sourceRevision,
+                highlightedBlockId = highlightedBlockId,
+                underlinedBlockIds = underlinedBlockIds,
+                onBlockFocused = onBlockFocused,
+                onBlockPositioned = onBlockPositioned,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            MarkdownLatexText(content = content, modifier = Modifier.fillMaxWidth())
+        }
     } else {
         Text("暂无内容")
     }

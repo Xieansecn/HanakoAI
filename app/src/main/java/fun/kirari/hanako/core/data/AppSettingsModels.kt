@@ -197,7 +197,7 @@ data class WebSearchSettings(
 
 @Serializable
 data class AppSettings(
-    val schemaVersion: Int = 2,
+    val schemaVersion: Int = 3,
     val providers: List<ModelProviderConfig> = listOf(defaultProvider()),
     val selectedProviderId: String? = providers.firstOrNull()?.id,
     val assistants: List<AssistantPreset> = defaultAssistants(),
@@ -336,7 +336,7 @@ fun AppSettings.normalize(): AppSettings {
     )
         .normalizedHistoryMetadata()
     return copy(
-        schemaVersion = maxOf(schemaVersion, 2),
+        schemaVersion = maxOf(schemaVersion, 3),
         providers = normalizedProviders,
         automation = automation.normalize(),
         kirari = normalizedKirari,

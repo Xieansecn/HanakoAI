@@ -20,6 +20,7 @@ import `fun`.kirari.hanako.BuildConfig
 import `fun`.kirari.hanako.core.data.AppSettings
 import `fun`.kirari.hanako.core.data.HistoryCommandResult
 import `fun`.kirari.hanako.core.data.HistoryMarkerColor
+import `fun`.kirari.hanako.core.model.QuotedFragment
 import `fun`.kirari.hanako.core.data.QuestionCardArtifact
 import `fun`.kirari.hanako.core.data.AssistantPreset
 import `fun`.kirari.hanako.core.data.AutomationSettings
@@ -247,8 +248,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         historyWorkflowController.regenerateHistoryResult(resultId)
     }
 
-    fun sendHistoryFollowUp(resultId: String, prompt: String) {
-        historyWorkflowController.sendHistoryFollowUp(resultId, prompt)
+    fun sendHistoryFollowUp(resultId: String, prompt: String, quotedFragments: List<QuotedFragment> = emptyList()) {
+        historyWorkflowController.sendHistoryFollowUp(resultId, prompt, quotedFragments)
     }
 
     fun retryLatestHistoryFollowUp(resultId: String) {

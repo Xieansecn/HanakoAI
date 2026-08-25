@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.core.model.AnswerVersion
 import `fun`.kirari.hanako.core.model.ProcessingResult
 import `fun`.kirari.hanako.core.model.ProcessingRoute
+import `fun`.kirari.hanako.core.model.QuotedFragment
 import `fun`.kirari.hanako.core.ui.components.AnimatedAnswerVersionContent
 import `fun`.kirari.hanako.core.ui.components.AnswerActionBar
 import `fun`.kirari.hanako.core.ui.components.AnswerSwitchDirection
@@ -54,6 +55,13 @@ internal fun HistoryDetailContent(
     onFollowUpDraftChange: (String) -> Unit,
     onSendFollowUp: (() -> Unit)?,
     onRetryFollowUp: (() -> Unit)?
+    ,draftQuotes: List<QuotedFragment> = emptyList()
+    ,highlightedBlockId: String? = null
+    ,underlinedBlockIds: Set<String> = emptySet()
+    ,onBlockFocused: (HistoryRenderedBlock) -> Unit = {}
+    ,onBlockPositioned: (HistoryRenderedBlock) -> Unit = {}
+    ,onRemoveDraftQuote: (String) -> Unit = {}
+    ,onQuoteClick: (QuotedFragment) -> Unit = {}
 ) {
     val context = LocalContext.current
     Box(modifier = Modifier.fillMaxSize()) {
@@ -98,7 +106,17 @@ internal fun HistoryDetailContent(
                                 }
                             )
                         }
-                    ) { HistoryMarkdownOrEmpty(result.extractedText) }
+                    ) {
+                        HistoryMarkdownOrEmpty(
+                            result.extractedText,
+                            historyId = result.id,
+                            messageId = "${result.id}:initial-question",
+                            highlightedBlockId = highlightedBlockId,
+                            underlinedBlockIds = underlinedBlockIds,
+                            onBlockFocused = onBlockFocused,
+                            onBlockPositioned = onBlockPositioned
+                        )
+                    }
                 }
             }
             if (result.detail.isNotBlank()) {
@@ -170,10 +188,30 @@ internal fun HistoryDetailContent(
                             )
                         }
                         if (regenerating) {
-                            HistoryMarkdownOrEmpty(displayedAnswer)
+                            HistoryMarkdownOrEmpty(
+                                displayedAnswer,
+                                historyId = result.id,
+                                messageId = "${result.id}:initial-answer",
+                                answerVersionId = answerVersions.getOrNull(currentVersionIndex)?.id,
+                                sourceRevision = result.createdAtMillis,
+                                highlightedBlockId = highlightedBlockId,
+                                underlinedBlockIds = underlinedBlockIds,
+                                onBlockFocused = onBlockFocused,
+                                onBlockPositioned = onBlockPositioned
+                            )
                         } else {
                             AnimatedAnswerVersionContent(displayedAnswer, switchDirection) {
-                                HistoryMarkdownOrEmpty(it)
+                                HistoryMarkdownOrEmpty(
+                                    it,
+                                    historyId = result.id,
+                                    messageId = "${result.id}:initial-answer",
+                                    answerVersionId = answerVersions.getOrNull(currentVersionIndex)?.id,
+                                    sourceRevision = result.createdAtMillis,
+                                    highlightedBlockId = highlightedBlockId,
+                                    underlinedBlockIds = underlinedBlockIds,
+                                    onBlockFocused = onBlockFocused,
+                                    onBlockPositioned = onBlockPositioned
+                                )
                             }
                         }
                     }
@@ -189,12 +227,18 @@ internal fun HistoryDetailContent(
                 }
                 itemsIndexed(result.followUpTurns, key = { _, turn -> turn.id }) { index, turn ->
                     HistoryChatTurn(
+                        historyId = result.id,
                         turn = turn,
                         sending = chatSending && index == result.followUpTurns.lastIndex,
                         isLatest = index == result.followUpTurns.lastIndex,
                         retryEnabled = !chatSending && onRetryFollowUp != null,
                         onSelectText = onSelectRawText,
                         onRetry = { onRetryFollowUp?.invoke() }
+                        ,highlightedBlockId = highlightedBlockId
+                        ,underlinedBlockIds = underlinedBlockIds
+                        ,onBlockFocused = onBlockFocused
+                        ,onBlockPositioned = onBlockPositioned
+                        ,onQuoteClick = onQuoteClick
                     )
                 }
             }
@@ -203,6 +247,8 @@ internal fun HistoryDetailContent(
 
         HistoryChatComposer(
             value = followUpDraft,
+            quotedFragments = draftQuotes,
+            onRemoveQuote = onRemoveDraftQuote,
             enabled = !chatSending && !regenerating && onSendFollowUp != null,
             sending = chatSending,
             modelLabel = conversationModelLabel,

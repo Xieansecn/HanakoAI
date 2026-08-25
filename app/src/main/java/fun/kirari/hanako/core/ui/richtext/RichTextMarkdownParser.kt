@@ -6,6 +6,7 @@ import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
+import `fun`.kirari.hanako.core.model.RichTextBlockKind
 
 internal val markdownFlavor by lazy {
     GFMFlavourDescriptor(makeHttpsAutoLinks = true, useSafeLinks = true)
@@ -108,6 +109,41 @@ internal data class MarkdownParseResult(
 internal sealed class MarkdownRenderBlock {
     data class Markdown(val content: String) : MarkdownRenderBlock()
     data class DisplayMath(val latex: String) : MarkdownRenderBlock()
+}
+
+data class RichTextBlock(
+    val kind: RichTextBlockKind,
+    val rawMarkdown: String,
+    val ordinal: Int
+)
+
+fun extractRichTextBlocks(content: String): List<RichTextBlock> {
+    val (preprocessed, _) = preprocessMarkdown(content, extractCopyMarkers = false)
+    val blocks = mutableListOf<RichTextBlock>()
+    splitDisplayMathBlocks(preprocessed).forEach { renderBlock ->
+        when (renderBlock) {
+            is MarkdownRenderBlock.DisplayMath -> blocks += RichTextBlock(
+                kind = RichTextBlockKind.DISPLAY_MATH,
+                rawMarkdown = renderBlock.latex,
+                ordinal = blocks.size
+            )
+            is MarkdownRenderBlock.Markdown -> {
+                val tree = markdownParser.buildMarkdownTreeFromString(renderBlock.content)
+                tree.children.forEach { child ->
+                    if (child.getText(renderBlock.content).isNotBlank()) {
+                        blocks += RichTextBlock(
+                            kind = RichTextBlockKind.PARAGRAPH,
+                            rawMarkdown = child.getText(renderBlock.content),
+                            ordinal = blocks.size
+                        )
+                    }
+                }
+            }
+        }
+    }
+    return blocks.ifEmpty {
+        listOf(RichTextBlock(RichTextBlockKind.PARAGRAPH, content, 0))
+    }
 }
 
 internal fun ASTNode.getText(text: String): String = text.substring(startOffset, endOffset)
