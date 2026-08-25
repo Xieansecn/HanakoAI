@@ -68,7 +68,7 @@ internal class ConversationWorkflow(
         }
         val (prompt, retainedTurns, retainedVersions) = when (intent) {
             is ConversationIntent.NewTurn -> Triple(
-                intent.prompt,
+                buildQuotedPrompt(intent.prompt, intent.quotedFragments),
                 existingResult.followUpTurns,
                 emptyList()
             )
@@ -84,7 +84,14 @@ internal class ConversationWorkflow(
         }
         val pendingTurn = FollowUpTurn(
             id = turnId,
-            userText = prompt,
+            userText = when (intent) {
+                is ConversationIntent.NewTurn -> intent.prompt
+                ConversationIntent.RegenerateLatest -> existingResult.followUpTurns.lastOrNull()?.userText.orEmpty()
+            },
+            quotedFragments = when (intent) {
+                is ConversationIntent.NewTurn -> intent.quotedFragments
+                ConversationIntent.RegenerateLatest -> existingResult.followUpTurns.lastOrNull()?.quotedFragments.orEmpty()
+            },
             assistantVersions = retainedVersions,
             modelSummary = pipeline.buildModelSummary(model, provider.name)
         )
@@ -157,6 +164,18 @@ internal class ConversationWorkflow(
         }
         return messages
     }
+}
+
+internal fun buildQuotedPrompt(
+    prompt: String,
+    quotedFragments: List<`fun`.kirari.hanako.core.model.QuotedFragment>
+): String {
+    val trimmed = prompt.trim()
+    if (quotedFragments.isEmpty()) return trimmed
+    val quotes = quotedFragments.joinToString("\n\n") { fragment ->
+        "[引用片段]\n${fragment.anchor.rawMarkdown}\n[/引用片段]"
+    }
+    return "$quotes\n\n$trimmed"
 }
 
 private fun ProcessingResult.initialAssistantContext(): String {

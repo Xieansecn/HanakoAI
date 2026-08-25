@@ -3,6 +3,7 @@ package `fun`.kirari.hanako.core.data
 import `fun`.kirari.hanako.BuildConfig
 import `fun`.kirari.hanako.core.model.ProcessingResult
 import `fun`.kirari.hanako.core.model.ProcessingRoute
+import `fun`.kirari.hanako.core.model.withStableAnswerVersionIds
 import `fun`.kirari.llm.core.ProviderKind
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -326,7 +327,13 @@ fun AppSettings.normalize(): AppSettings {
         .map { it.copy(name = it.name.normalizedHistoryGroupName()) }
         .filter { it.name.isNotBlank() }
         .distinctBy { it.name.lowercase() }
-    val normalizedHistory = copy(historyGroups = normalizedGroups)
+    val normalizedHistoryResults = history.map { it.withStableAnswerVersionIds() }
+    val normalizedLastResult = lastResult?.withStableAnswerVersionIds()
+    val normalizedHistory = copy(
+        history = normalizedHistoryResults,
+        lastResult = normalizedLastResult,
+        historyGroups = normalizedGroups
+    )
         .normalizedHistoryMetadata()
     return copy(
         schemaVersion = maxOf(schemaVersion, 2),
@@ -355,6 +362,8 @@ fun AppSettings.normalize(): AppSettings {
                 fallbackProvider.visionModel
             } ?: fallbackProvider?.visionModel.orEmpty()
         ),
+        lastResult = normalizedLastResult,
+        history = normalizedHistoryResults,
         historyGroups = normalizedGroups,
         historyMetadata = normalizedHistory
     )

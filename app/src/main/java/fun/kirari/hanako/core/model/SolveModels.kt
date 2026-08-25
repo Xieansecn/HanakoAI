@@ -1,6 +1,7 @@
 package `fun`.kirari.hanako.core.model
 
 import java.util.UUID
+import java.nio.charset.StandardCharsets
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -43,6 +44,7 @@ data class ProcessingResult(
 data class FollowUpTurn(
     val id: String = UUID.randomUUID().toString(),
     val userText: String,
+    val quotedFragments: List<QuotedFragment> = emptyList(),
     val assistantText: String = "",
     val assistantVersions: List<AnswerVersion> = emptyList(),
     val pendingAssistantText: String = "",
@@ -55,8 +57,59 @@ data class FollowUpTurn(
 @Serializable
 data class AnswerVersion(
     val text: String,
-    val createdAtMillis: Long = System.currentTimeMillis()
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val id: String = UUID.randomUUID().toString()
 )
+
+@Serializable
+enum class RichTextBlockKind {
+    PARAGRAPH,
+    DISPLAY_MATH
+}
+
+@Serializable
+data class ContentAnchor(
+    val historyId: String,
+    val messageId: String,
+    val answerVersionId: String? = null,
+    val blockId: String,
+    val blockKind: RichTextBlockKind,
+    val sourceRevision: Long,
+    val rawMarkdown: String,
+    val previewLabel: String
+)
+
+@Serializable
+data class QuotedFragment(
+    val id: String = UUID.randomUUID().toString(),
+    val anchor: ContentAnchor,
+    val quotedAtMillis: Long = System.currentTimeMillis()
+)
+
+fun AnswerVersion.stableFor(messageId: String, index: Int): AnswerVersion {
+    val stableId = UUID.nameUUIDFromBytes(
+        "hanako-answer-version:$messageId:$index:$createdAtMillis:$text".toByteArray(StandardCharsets.UTF_8)
+    ).toString()
+    return copy(id = stableId)
+}
+
+fun ProcessingResult.withStableAnswerVersionIds(): ProcessingResult {
+    val initialMessageId = "$id:initial"
+    val stableVersions = displayedAnswerVersions().mapIndexed { index, version ->
+        version.stableFor(initialMessageId, index)
+    }
+    val stableTurns = followUpTurns.map { turn ->
+        turn.copy(
+            assistantVersions = turn.displayedAssistantVersions().mapIndexed { index, version ->
+                version.stableFor(turn.id, index)
+            }
+        )
+    }
+    return copy(
+        answerVersions = stableVersions,
+        followUpTurns = stableTurns
+    )
+}
 
 @Serializable
 data class ProcessingEvent(

@@ -4,6 +4,7 @@ import `fun`.kirari.hanako.core.data.AppSettings
 import `fun`.kirari.hanako.core.data.ModelSelection
 import `fun`.kirari.hanako.core.debug.AppDebugLogStore
 import `fun`.kirari.hanako.core.model.ProcessingResult
+import `fun`.kirari.hanako.core.model.QuotedFragment
 import `fun`.kirari.hanako.solve.model.WorkflowTaskState
 import `fun`.kirari.hanako.solve.model.WorkflowTaskKind
 import `fun`.kirari.hanako.solve.model.WorkflowTaskStatus
@@ -96,9 +97,10 @@ internal class SolveOperations(
         settings: AppSettings,
         historyId: String,
         prompt: String,
+        quotedFragments: List<QuotedFragment> = emptyList(),
         modelSelection: ModelSelection? = null
     ) {
-        startConversation(settings, historyId, ConversationIntent.NewTurn(prompt), modelSelection)
+        startConversation(settings, historyId, ConversationIntent.NewTurn(prompt, quotedFragments), modelSelection)
     }
 
     suspend fun retryLatestConversation(
@@ -121,7 +123,7 @@ internal class SolveOperations(
             is ConversationIntent.NewTurn -> {
                 val prompt = intent.prompt.trim()
                 if (prompt.isBlank()) return
-                ConversationIntent.NewTurn(prompt)
+                ConversationIntent.NewTurn(prompt, intent.quotedFragments)
             }
             ConversationIntent.RegenerateLatest -> {
                 if (existing.followUpTurns.isEmpty()) return
