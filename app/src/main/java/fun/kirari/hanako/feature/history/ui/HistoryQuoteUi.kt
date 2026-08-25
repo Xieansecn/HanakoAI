@@ -2,6 +2,7 @@ package `fun`.kirari.hanako.feature.history.ui
 
 import android.graphics.Rect
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,11 +11,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import `fun`.kirari.hanako.core.model.ContentAnchor
 import `fun`.kirari.hanako.core.model.RichTextBlockKind
@@ -107,12 +110,13 @@ internal fun HistoryInteractiveMarkdown(
                     } else Modifier
                 )
                 .then(
-                    if (focused) Modifier.drawBehind {
-                        drawRect(primaryColor.copy(alpha = 0.12f))
-                    } else Modifier
+                    if (focused) Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(primaryColor.copy(alpha = 0.12f))
+                    else Modifier
                 )
                 .onGloballyPositioned { coordinates ->
-                    val position = coordinates.positionInWindow()
+                    val position = coordinates.positionInRoot()
                     val size = coordinates.size
                     val positioned = HistoryRenderedBlock(
                         anchor,
@@ -125,7 +129,7 @@ internal fun HistoryInteractiveMarkdown(
                 }
                 .combinedClickable(
                     onClick = {
-                        onBlockFocused(rendered)
+                        if (underlined) onBlockFocused(rendered)
                     },
                     onLongClick = {
                         onBlockFocused(rendered)
@@ -133,7 +137,7 @@ internal fun HistoryInteractiveMarkdown(
                 )
             Box(modifier = blockModifier) {
                 if (block.kind == RichTextBlockKind.DISPLAY_MATH) {
-                    MarkdownLatexText("$$\n${block.rawMarkdown}\n$$", modifier = Modifier.fillMaxWidth())
+                    MarkdownLatexText(block.rawMarkdown, modifier = Modifier.fillMaxWidth())
                 } else {
                     MarkdownLatexText(block.rawMarkdown, modifier = Modifier.fillMaxWidth())
                 }

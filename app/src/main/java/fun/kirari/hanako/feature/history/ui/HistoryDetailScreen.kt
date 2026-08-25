@@ -6,12 +6,17 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
@@ -175,18 +180,22 @@ fun HistoryDetailScreen(
         val density = LocalDensity.current
         val configuration = LocalConfiguration.current
         val menuWidthPx = with(density) { 180.dp.roundToPx() }
-        val menuHeightPx = with(density) { 104.dp.roundToPx() }
         val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
         val screenHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
         val target = block.anchor
         val quoteCount = result.followUpTurns.sumOf { turn ->
             turn.quotedFragments.count { it.anchor.blockId == target.blockId }
         }
+        val menuHeightPx = with(density) { (if (quoteCount > 0) 104.dp else 56.dp).roundToPx() }
+        val menuX = block.rect.left.coerceIn(8, (screenWidthPx - menuWidthPx - 8).coerceAtLeast(8))
+        val belowY = block.rect.bottom + 8
+        val aboveY = block.rect.top - menuHeightPx - 8
+        val menuY = if (belowY + menuHeightPx <= screenHeightPx - 8) belowY else aboveY.coerceAtLeast(8)
         Popup(
             alignment = androidx.compose.ui.Alignment.TopStart,
             offset = IntOffset(
-                block.rect.left.coerceIn(8, (screenWidthPx - menuWidthPx - 8).coerceAtLeast(8)),
-                (block.rect.bottom + 6).coerceIn(8, (screenHeightPx - menuHeightPx - 8).coerceAtLeast(8))
+                menuX,
+                menuY
             ),
             onDismissRequest = { menuBlock = null },
             properties = PopupProperties(focusable = true)
@@ -197,19 +206,31 @@ fun HistoryDetailScreen(
                 shape = androidx.compose.material3.MaterialTheme.shapes.medium
             ) {
                 Column {
-                    TextButton(onClick = {
+                    TextButton(
+                        modifier = Modifier.width(180.dp),
+                        onClick = {
                         block.toQuotedFragment().let { quote ->
                             if (draftQuotes.none { it.anchor.blockId == quote.anchor.blockId }) {
                                 draftQuotes = draftQuotes + quote
                             }
                         }
                         menuBlock = null
-                    }) { Text("引用") }
+                    }) {
+                        Icon(Icons.Default.FormatQuote, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("引用")
+                    }
                     if (quoteCount > 0) {
-                        TextButton(onClick = {
+                        TextButton(
+                            modifier = Modifier.width(180.dp),
+                            onClick = {
                             viewerQuote = QuotedFragment(anchor = target)
                             menuBlock = null
-                        }) { Text("查看引用（$quoteCount）") }
+                        }) {
+                            Icon(Icons.Default.FormatQuote, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("查看引用（$quoteCount）")
+                        }
                     }
                 }
             }
