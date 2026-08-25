@@ -21,8 +21,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
@@ -189,15 +193,29 @@ fun HistoryDetailScreen(
             turn.quotedFragments.count { it.anchor.blockId == target.blockId }
         }
         val menuHeightPx = with(density) { (if (quoteCount > 0) 104.dp else 56.dp).roundToPx() }
-        val menuX = block.rect.left.coerceIn(8, (screenWidthPx - menuWidthPx - 8).coerceAtLeast(8))
-        val belowY = block.rect.bottom + 8
-        val aboveY = block.rect.top - menuHeightPx - 8
+        val menuX = (block.rect.centerX() - menuWidthPx / 2)
+            .coerceIn(8, (screenWidthPx - menuWidthPx - 8).coerceAtLeast(8))
+        val belowY = block.rect.bottom + 4
+        val aboveY = block.rect.top - menuHeightPx - 4
         val menuY = if (belowY + menuHeightPx <= screenHeightPx - 8) belowY else aboveY.coerceAtLeast(8)
+        val menuProgress = remember(block.anchor.blockId) { Animatable(0f) }
+        LaunchedEffect(block.anchor.blockId) {
+            menuProgress.snapTo(0f)
+            menuProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(260, easing = FastOutSlowInEasing)
+            )
+        }
+        val progress = menuProgress.value
+        val startX = block.rect.centerX() - menuWidthPx / 2
+        val startY = block.rect.centerY() - menuHeightPx / 2
+        val animatedX = (startX + (menuX - startX) * progress).toInt()
+        val animatedY = (startY + (menuY - startY) * progress).toInt()
         Popup(
             alignment = androidx.compose.ui.Alignment.TopStart,
             offset = IntOffset(
-                menuX,
-                menuY
+                animatedX,
+                animatedY
             ),
             onDismissRequest = {
                 menuBlock = null
@@ -206,6 +224,12 @@ fun HistoryDetailScreen(
             properties = PopupProperties(focusable = true)
         ) {
             Surface(
+                modifier = Modifier.graphicsLayer {
+                    alpha = progress
+                    val scale = 0.82f + 0.18f * progress
+                    scaleX = scale
+                    scaleY = scale
+                },
                 tonalElevation = 6.dp,
                 shadowElevation = 8.dp,
                 shape = androidx.compose.material3.MaterialTheme.shapes.medium
