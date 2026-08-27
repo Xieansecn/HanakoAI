@@ -2,7 +2,7 @@
 
 Hanako 是一个 Android 悬浮窗 AI 客户端，核心用途是截图识题与快速作答。默认助手提示词偏向搜题场景，也可以在应用内改成翻译、总结、阅读辅助等其他用途。
 
-[[Download 0.0.17-alpha](https://github.com/zyf2007/HanakoAI/releases/download/v0.0.17-alpha/app-lite-arm64-v8a-release.apk)]  [[View Release Notes](https://github.com/zyf2007/HanakoAI/releases/tag/v0.0.17-alpha)] [[Telegram](https://t.me/hutao_space)]
+[[Download 0.0.18-alpha](https://github.com/zyf2007/HanakoAI/releases/download/v0.0.18-alpha/app-lite-arm64-v8a-release.apk)]  [[View Release Notes](https://github.com/zyf2007/HanakoAI/releases/tag/v0.0.18-alpha)] [[Telegram](https://t.me/hutao_space)]
 
 Hanako 把截图、识题、解题、复制/填写这几个步骤压缩到尽可能短：
 
@@ -190,8 +190,7 @@ Hanako 把截图、识题、解题、复制/填写这几个步骤压缩到尽可
 
 ## Changelog
 
-- 历史记录新增分组管理、未分组视图和独立分组页面，支持新建、重命名、删除分组以及一个题目加入多个分组。
-- 重做历史记录卡片和长按操作，加入状态、自然日期时间、七色标签、多选及批量移动、标色、导出和删除。
-- 新增题目卡片导出与统一图片预览，支持双击/双指缩放、长按保存、分享，以及批量保存结果提示。
-- 可复制内容块支持 Markdown 与 LaTeX，按实际渲染结果自适应高度，复制时仍保留原始文本。
-- 助手设置新增 AI 总结标题开关和提示词，生成结果通过内容版本校验，避免旧标题覆盖新答案。
+- 历史记录支持长按或点击已引用内容块，快速定位并查看对应题目与回答。
+- 新增 Markdown 内容块引用流程，可在追问中携带多个引用片段，并显示引用关系。
+- 引用菜单新增复制、引用和关闭操作，适配数学公式内容的尺寸与预览定位。
+- 统一历史记录与模型提供方的数据存储权威，补充答案版本 ID 迁移和架构回归测试。

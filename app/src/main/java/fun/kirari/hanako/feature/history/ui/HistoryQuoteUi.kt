@@ -3,6 +3,7 @@ package `fun`.kirari.hanako.feature.history.ui
 import android.graphics.Rect
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,9 +21,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.LocalIndication
 import `fun`.kirari.hanako.core.model.ContentAnchor
 import `fun`.kirari.hanako.core.model.RichTextBlockKind
 import `fun`.kirari.hanako.core.model.QuotedFragment
@@ -31,6 +35,7 @@ import `fun`.kirari.hanako.core.ui.richtext.RichTextBlock
 import `fun`.kirari.hanako.core.ui.richtext.extractRichTextBlocks
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import kotlin.math.roundToInt
 
 internal data class HistoryRenderedBlock(
     val anchor: ContentAnchor,
@@ -96,13 +101,16 @@ internal fun HistoryInteractiveMarkdown(
                 )
             }
             var currentRect by remember(anchor) { mutableStateOf(Rect()) }
+            var latestCoordinates: LayoutCoordinates? = null
             val focused = highlightedBlockId == anchor.blockId
             val underlined = anchor.blockId in underlinedBlockIds
+            val interactionSource = remember(anchor.blockId) { MutableInteractionSource() }
+            val indication = if (underlined) LocalIndication.current else null
             val primaryColor = MaterialTheme.colorScheme.primary
             val blockModifier = Modifier
                 .then(
                     if (block.kind == RichTextBlockKind.DISPLAY_MATH) {
-                        Modifier.wrapContentWidth(unbounded = true)
+                        Modifier.wrapContentWidth()
                     } else {
                         Modifier.fillMaxWidth()
                     }
@@ -127,6 +135,7 @@ internal fun HistoryInteractiveMarkdown(
                     else Modifier
                 )
                 .onGloballyPositioned { coordinates ->
+                    latestCoordinates = coordinates
                     val position = coordinates.positionInWindow()
                     val size = coordinates.size
                     val positioned = HistoryRenderedBlock(
@@ -140,11 +149,16 @@ internal fun HistoryInteractiveMarkdown(
                     onBlockPositioned(positioned)
                 }
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = indication,
                     onClick = {
-                        if (underlined) onBlockFocused(HistoryRenderedBlock(anchor, currentRect))
+                        if (underlined) {
+                            onBlockFocused(HistoryRenderedBlock(anchor, latestCoordinates?.boundsInWindow()?.toAndroidRect() ?: currentRect))
+                        }
                     },
                     onLongClick = {
-                        onBlockFocused(HistoryRenderedBlock(anchor, currentRect))
+                        val rect = latestCoordinates?.boundsInWindow()?.toAndroidRect() ?: currentRect
+                        onBlockFocused(HistoryRenderedBlock(anchor, rect))
                     }
                 )
             Box(modifier = blockModifier) {
@@ -160,3 +174,10 @@ internal fun HistoryInteractiveMarkdown(
         }
     }
 }
+
+private fun androidx.compose.ui.geometry.Rect.toAndroidRect(): Rect = Rect(
+    left.roundToInt(),
+    top.roundToInt(),
+    right.roundToInt(),
+    bottom.roundToInt()
+)

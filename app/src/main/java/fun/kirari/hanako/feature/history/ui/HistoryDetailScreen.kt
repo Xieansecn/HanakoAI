@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,11 +22,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
@@ -39,7 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.rememberLazyListState
 import `fun`.kirari.hanako.core.model.ProcessingResult
 import `fun`.kirari.hanako.core.model.QuotedFragment
@@ -47,11 +46,32 @@ import `fun`.kirari.hanako.core.model.decodeHistoryBitmap
 import `fun`.kirari.hanako.core.model.displayedAnswerVersions
 import `fun`.kirari.hanako.core.model.latestAnswerText
 import `fun`.kirari.hanako.core.model.loadHistoryBitmap
+import `fun`.kirari.hanako.core.model.currentAssistantText
 import `fun`.kirari.hanako.core.ui.components.AnswerSwitchDirection
 import `fun`.kirari.hanako.core.ui.richtext.MarkdownLatexText
 import `fun`.kirari.hanako.core.ui.image.ImagePreviewOverlay
 import `fun`.kirari.hanako.feature.home.presentation.RegisterScrollToTopHandler
 import kotlinx.coroutines.launch
+import `fun`.kirari.hanako.platform.clipboard.copyToClipboardWithToast
+
+private data class HistoryQuoteViewer(
+    val quote: QuotedFragment,
+    val question: String,
+    val answer: String
+)
+
+private fun historyQuoteViewer(
+    result: ProcessingResult,
+    displayedAnswer: String,
+    quote: QuotedFragment
+): HistoryQuoteViewer {
+    val followUp = result.followUpTurns.firstOrNull { it.id == quote.anchor.messageId }
+    return if (followUp == null) {
+        HistoryQuoteViewer(quote, result.extractedText.ifBlank { "图片题目" }, displayedAnswer.ifBlank { "暂无回答" })
+    } else {
+        HistoryQuoteViewer(quote, followUp.userText.ifBlank { "暂无问题" }, followUp.currentAssistantText().ifBlank { "暂无回答" })
+    }
+}
 
 @Composable
 fun HistoryDetailScreen(
@@ -64,7 +84,8 @@ fun HistoryDetailScreen(
     onRegenerate: ((ProcessingResult) -> Unit)? = null,
     onSelectConversationModel: (() -> Unit)? = null,
     onSendFollowUp: ((String, List<QuotedFragment>) -> Unit)? = null,
-    onRetryFollowUp: (() -> Unit)? = null
+    onRetryFollowUp: (() -> Unit)? = null,
+    onBlockFocusChanged: (Boolean) -> Unit = {}
 ) {
     if (result == null) {
         MissingHistoryDetail()
@@ -94,7 +115,12 @@ fun HistoryDetailScreen(
     var focusedBlock by remember(result.id) { mutableStateOf<HistoryRenderedBlock?>(null) }
     var blockRects by remember(result.id) { mutableStateOf<Map<String, HistoryRenderedBlock>>(emptyMap()) }
     var menuBlock by remember(result.id) { mutableStateOf<HistoryRenderedBlock?>(null) }
-    var viewerQuote by remember(result.id) { mutableStateOf<QuotedFragment?>(null) }
+    var viewerQuote by remember(result.id) { mutableStateOf<HistoryQuoteViewer?>(null) }
+    val context = LocalContext.current
+
+    LaunchedEffect(menuBlock != null) {
+        onBlockFocusChanged(menuBlock != null)
+    }
 
     LaunchedEffect(regenerating, runningAnswerVersionIndex, answerVersions.size) {
         if (regenerating && answerVersions.isNotEmpty()) {
@@ -154,9 +180,8 @@ fun HistoryDetailScreen(
         highlightedBlockId = focusedBlock?.anchor?.blockId,
         underlinedBlockIds = result.followUpTurns.flatMap { it.quotedFragments }.map { it.anchor.blockId }.toSet(),
         onBlockFocused = {
-            val positioned = blockRects[it.anchor.blockId] ?: it
-            focusedBlock = positioned
-            menuBlock = positioned
+            focusedBlock = it
+            menuBlock = it
         },
         onBlockPositioned = { positioned -> blockRects = blockRects + (positioned.anchor.blockId to positioned) },
         onRemoveDraftQuote = { id -> draftQuotes = draftQuotes.filterNot { it.id == id } },
@@ -184,39 +209,21 @@ fun HistoryDetailScreen(
 
     menuBlock?.let { block ->
         val density = LocalDensity.current
-        val configuration = LocalConfiguration.current
-        val menuWidthPx = with(density) { 120.dp.roundToPx() }
-        val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
-        val screenHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
         val target = block.anchor
         val quoteCount = result.followUpTurns.sumOf { turn ->
             turn.quotedFragments.count { it.anchor.blockId == target.blockId }
         }
-        val menuHeightPx = with(density) { (if (quoteCount > 0) 104.dp else 56.dp).roundToPx() }
-        val menuX = (block.rect.centerX() - menuWidthPx / 2)
-            .coerceIn(8, (screenWidthPx - menuWidthPx - 8).coerceAtLeast(8))
-        val belowY = block.rect.bottom + 4
-        val aboveY = block.rect.top - menuHeightPx - 4
-        val menuY = if (belowY + menuHeightPx <= screenHeightPx - 8) belowY else aboveY.coerceAtLeast(8)
-        val menuProgress = remember(block.anchor.blockId) { Animatable(0f) }
+        val menuBottomOffsetPx = with(density) {
+            ((if (quoteCount > 0) 190.dp else 142.dp) + bottomInset).roundToPx()
+        }
+        val menuProgress = remember(block.anchor.blockId) { androidx.compose.animation.core.Animatable(0f) }
         LaunchedEffect(block.anchor.blockId) {
             menuProgress.snapTo(0f)
-            menuProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(130, easing = FastOutSlowInEasing)
-            )
+            menuProgress.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(130))
         }
-        val progress = menuProgress.value
-        val startX = block.rect.centerX() - menuWidthPx / 2
-        val startY = block.rect.centerY() - menuHeightPx / 2
-        val animatedX = (startX + (menuX - startX) * progress).toInt()
-        val animatedY = (startY + (menuY - startY) * progress).toInt()
         Popup(
-            alignment = androidx.compose.ui.Alignment.TopStart,
-            offset = IntOffset(
-                animatedX,
-                animatedY
-            ),
+            alignment = androidx.compose.ui.Alignment.BottomCenter,
+            offset = IntOffset(0, -menuBottomOffsetPx),
             onDismissRequest = {
                 menuBlock = null
                 focusedBlock = null
@@ -224,17 +231,28 @@ fun HistoryDetailScreen(
             properties = PopupProperties(focusable = true)
         ) {
             Surface(
-                modifier = Modifier.graphicsLayer {
-                    alpha = progress
-                    val scale = 0.82f + 0.18f * progress
-                    scaleX = scale
-                    scaleY = scale
-                },
+                modifier = Modifier.alpha(menuProgress.value),
                 tonalElevation = 6.dp,
                 shadowElevation = 8.dp,
                 shape = androidx.compose.material3.MaterialTheme.shapes.medium
             ) {
                 Column {
+                    TextButton(
+                        modifier = Modifier.width(120.dp),
+                        onClick = {
+                        copyToClipboardWithToast(context, "Hanako 引用片段", target.rawMarkdown, "已复制引用")
+                        menuBlock = null
+                        focusedBlock = null
+                    }) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null)
+                            Text("复制")
+                        }
+                    }
                     TextButton(
                         modifier = Modifier.width(120.dp),
                         onClick = {
@@ -259,7 +277,7 @@ fun HistoryDetailScreen(
                         TextButton(
                             modifier = Modifier.width(120.dp),
                             onClick = {
-                            viewerQuote = QuotedFragment(anchor = target)
+                            viewerQuote = historyQuoteViewer(result, displayedAnswer, QuotedFragment(anchor = target))
                             menuBlock = null
                             focusedBlock = null
                         }) {
@@ -269,11 +287,49 @@ fun HistoryDetailScreen(
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                             ) {
                                 Icon(Icons.Default.FormatQuote, contentDescription = null)
-                                Text("查看（$quoteCount）")
+                            Text("查看引用（$quoteCount）")
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    menuBlock?.let { block ->
+        val cardProgress = remember(block.anchor.blockId) { androidx.compose.animation.core.Animatable(0.4f) }
+        LaunchedEffect(block.anchor.blockId) {
+            cardProgress.snapTo(0.7f)
+            cardProgress.animateTo(
+                1f,
+                animationSpec = androidx.compose.animation.core.tween(
+                    90,
+                    easing = androidx.compose.animation.core.FastOutSlowInEasing
+                )
+            )
+        }
+        Popup(
+            alignment = androidx.compose.ui.Alignment.Center,
+            properties = PopupProperties(focusable = false, dismissOnClickOutside = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.82f)
+                    .graphicsLayer {
+                        alpha = cardProgress.value
+                        val scale = 0.9f + 0.1f * ((cardProgress.value - 0.7f) / 0.3f).coerceIn(0f, 1f)
+                        scaleX = scale
+                        scaleY = scale
+                    },
+                tonalElevation = 10.dp,
+                shadowElevation = 18.dp,
+                shape = androidx.compose.material3.MaterialTheme.shapes.large
+            ) {
+                MarkdownLatexText(
+                    block.anchor.rawMarkdown,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                    displayMathFillMaxWidth = false
+                )
             }
         }
     }
@@ -322,16 +378,16 @@ fun HistoryDetailScreen(
                 ) {
                     Text("问题", color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
                     MarkdownLatexText(
-                        result.extractedText.ifBlank { "图片题目" },
+                        quote.question,
                         modifier = Modifier.padding(top = 8.dp)
                     )
                     Text("回答", color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 14.dp))
                     MarkdownLatexText(
-                        displayedAnswer.ifBlank { "暂无回答" },
+                        quote.answer,
                         modifier = Modifier.padding(top = 8.dp)
                     )
                     Text("引用片段", color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 14.dp))
-                    MarkdownLatexText(quote.anchor.rawMarkdown, modifier = Modifier.padding(top = 8.dp))
+                    MarkdownLatexText(quote.quote.anchor.rawMarkdown, modifier = Modifier.padding(top = 8.dp))
                 }
             }
         )

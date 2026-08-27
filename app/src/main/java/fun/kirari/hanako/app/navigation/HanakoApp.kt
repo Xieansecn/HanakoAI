@@ -74,6 +74,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -125,6 +126,7 @@ fun HanakoApp(viewModel: AppViewModel) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var modelSelectionDialogState by remember { mutableStateOf(ModelSelectionDialogState()) }
     var historyModelPickerResultId by rememberSaveable { mutableStateOf<String?>(null) }
+    var historyQuoteFocused by remember { mutableStateOf(false) }
     var questionCardPreview by remember { mutableStateOf<QuestionCardArtifact?>(null) }
     val previewQuestionCard: (String) -> Unit = { resultId ->
         viewModel.createQuestionCard(resultId) { artifact ->
@@ -179,6 +181,12 @@ fun HanakoApp(viewModel: AppViewModel) {
     val currentRoute = backStackEntry?.destination?.route
     val topBarScrollToTopEnabled = scrollToTopController.canScrollToTop(currentRoute)
 
+    LaunchedEffect(currentRoute) {
+        if (currentRoute?.startsWith("$ROUTE_HANAKO_HISTORY_DETAIL/") != true) {
+            historyQuoteFocused = false
+        }
+    }
+
     LaunchedEffect(kirariAuthMessage) {
         val message = kirariAuthMessage ?: return@LaunchedEffect
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -226,13 +234,13 @@ fun HanakoApp(viewModel: AppViewModel) {
             )
     ) {
         Scaffold(
+            modifier = if (historyQuoteFocused) Modifier.blur(1.5.dp) else Modifier,
             topBar = {
                 CenterAlignedTopAppBar(
-                    modifier = if (topBarScrollToTopEnabled) {
-                        Modifier.clickable { scrollToTopController.scrollToTop(currentRoute) }
-                    } else {
-                        Modifier
-                    },
+                    modifier = Modifier
+                        .then(if (topBarScrollToTopEnabled) {
+                            Modifier.clickable { scrollToTopController.scrollToTop(currentRoute) }
+                        } else Modifier),
                     title = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -495,7 +503,8 @@ fun HanakoApp(viewModel: AppViewModel) {
                             },
                             onRetryFollowUp = {
                                 resultId?.let { viewModel.retryLatestHistoryFollowUp(it) }
-                            }
+                            },
+                            onBlockFocusChanged = { historyQuoteFocused = it }
                         )
                     }
                     composable(ROUTE_SETTINGS_PROVIDER) {
